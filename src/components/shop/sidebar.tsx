@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -12,13 +12,21 @@ import {
   Store,
   LogOut,
   LogIn,
+  LayoutDashboard,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
 
-export default function ShopSidebar() {
+function ShopSidebarInner() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const activeUser = mounted ? user : null;
 
   const handleLogout = () => {
     logout();
@@ -35,7 +43,7 @@ export default function ShopSidebar() {
     },
     {
       label: 'Pesanan',
-      href: '/checkout',
+      href: '/orders',
       icon: ShoppingBag,
       active: pathname.startsWith('/orders') || pathname === '/checkout',
     },
@@ -45,7 +53,6 @@ export default function ShopSidebar() {
   return (
     <aside className="lezzat-sidebar">
       <div>
-        {/* Brand Logo */}
         <Link href="/" className="flex items-center gap-3 mb-10">
           <div className="w-10 h-10 rounded-full bg-[#174634] flex items-center justify-center text-white shadow-sm">
             <Snowflake className="w-5 h-5" />
@@ -60,7 +67,6 @@ export default function ShopSidebar() {
           </div>
         </Link>
 
-        {/* Menu Utama */}
         <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-400 uppercase px-3 mb-3">
           MENU UTAMA
         </p>
@@ -85,9 +91,20 @@ export default function ShopSidebar() {
             );
           })}
         </nav>
+
+        {activeUser && (
+          <div className="mt-6 pt-6 border-t border-slate-100">
+            <Link
+              href="/admin/dashboard"
+              className="flex items-center gap-3 px-4 py-2.5 rounded-2xl text-xs font-semibold text-[#174634] bg-[#f2efe9] hover:bg-slate-200/70 transition-colors"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Buka Panel Admin</span>
+            </Link>
+          </div>
+        )}
       </div>
 
-      {/* Bagian Bawah: Kartu Mitra B2B & Tombol Akun */}
       <div className="space-y-4">
         <div className="rounded-2xl bg-[#f2efe9] p-4">
           <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[#174634] mb-3 shadow-xs">
@@ -108,14 +125,14 @@ export default function ShopSidebar() {
           </Link>
         </div>
 
-        {user ? (
+        {activeUser ? (
           <button
             type="button"
             onClick={handleLogout}
             className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-500 hover:text-red-600 transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
-            <span>Keluar akun ({user.nama})</span>
+            <span>Keluar akun ({activeUser.nama})</span>
           </button>
         ) : (
           <Link
@@ -128,5 +145,13 @@ export default function ShopSidebar() {
         )}
       </div>
     </aside>
+  );
+}
+
+export default function ShopSidebar() {
+  return (
+    <Suspense fallback={<aside className="lezzat-sidebar" />}>
+      <ShopSidebarInner />
+    </Suspense>
   );
 }

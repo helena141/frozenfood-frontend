@@ -1,8 +1,15 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Minus, Plus, Snowflake, ShoppingBag, ArrowRight, Trash2 } from 'lucide-react';
+import {
+  Minus,
+  Plus,
+  Snowflake,
+  ShoppingBag,
+  ArrowRight,
+  Trash2,
+} from 'lucide-react';
 import { useCartStore } from '@/store/cart-store';
 import { formatRupiah } from '@/lib/utils';
 
@@ -10,8 +17,16 @@ export default function CartPanel() {
   const { items, updateQty, removeItem, getTotalItems, getSubtotal } =
     useCartStore();
 
-  const totalItems = getTotalItems();
-  const subtotal = getSubtotal();
+  // Mencegah hydration mismatch antara SSR (0 item) dan localStorage di browser
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const displayItems = mounted ? items : [];
+  const totalItems = mounted ? getTotalItems() : 0;
+  const subtotal = mounted ? getSubtotal() : 0;
 
   return (
     <aside className="lezzat-cart">
@@ -27,7 +42,7 @@ export default function CartPanel() {
         </div>
 
         {/* Kondisi Keranjang Kosong */}
-        {items.length === 0 ? (
+        {displayItems.length === 0 ? (
           <div className="py-12 text-center">
             <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
               <ShoppingBag className="w-6 h-6" />
@@ -36,13 +51,14 @@ export default function CartPanel() {
               Keranjang masih kosong
             </p>
             <p className="text-xs text-slate-400">
-              Pilih produk frozen food favoritmu dari katalog untuk mulai belanja.
+              Pilih produk frozen food favoritmu dari katalog untuk mulai
+              belanja.
             </p>
           </div>
         ) : (
           /* Daftar Item di Keranjang */
           <div className="space-y-4">
-            {items.map(({ product, qty }) => {
+            {displayItems.map(({ product, qty }) => {
               const safeQty = Number.isNaN(qty) || qty < 1 ? 1 : qty;
               const maxStock =
                 typeof product.totalStokOnline === 'number' &&
@@ -129,9 +145,7 @@ export default function CartPanel() {
           </div>
           <div className="flex justify-between text-slate-500">
             <span>Pengiriman</span>
-            <span className="font-semibold text-[#174634]">
-              Gratis ≤ 5 km
-            </span>
+            <span className="font-semibold text-[#174634]">Gratis ≤ 5 km</span>
           </div>
           <div className="flex justify-between text-sm font-bold text-slate-900 pt-2 border-t border-slate-100">
             <span>Total</span>
@@ -140,10 +154,10 @@ export default function CartPanel() {
         </div>
 
         <Link
-          href={items.length > 0 ? '/checkout' : '#'}
-          aria-disabled={items.length === 0}
+          href={displayItems.length > 0 ? '/checkout' : '#'}
+          aria-disabled={displayItems.length === 0}
           className={`w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 px-5 text-xs font-semibold transition-colors ${
-            items.length > 0
+            displayItems.length > 0
               ? 'bg-[#174634] hover:bg-[#113527] text-white'
               : 'bg-slate-200 text-slate-400 pointer-events-none'
           }`}

@@ -25,7 +25,11 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { api } from '@/lib/axios';
-import { formatRupiah, getErrorMessage } from '@/lib/utils';
+import {
+  formatRupiah,
+  formatEstimasiTiba,
+  getErrorMessage,
+} from '@/lib/utils';
 import { useAuthStore } from '@/store/auth-store';
 import { useCartStore } from '@/store/cart-store';
 import {
@@ -36,7 +40,7 @@ import {
 } from '@/types/api';
 import ShopSidebar from '@/components/shop/sidebar';
 
-// 4 Preset Lokasi sesuai Bagian A6 (Tanpa hard-code ekspektasi keputusan di UI)
+// 4 Preset Lokasi sesuai Bagian A6
 const DEMO_LOCATIONS = [
   {
     label: 'Malioboro, Yogyakarta',
@@ -53,7 +57,8 @@ const DEMO_LOCATIONS = [
   },
   {
     label: 'Klaten, Jawa Tengah',
-    alamat: 'Jl. Pemuda No. 140, Tonggalan, Kec. Klaten Tengah, Kabupaten Klaten',
+    alamat:
+      'Jl. Pemuda No. 140, Tonggalan, Kec. Klaten Tengah, Kabupaten Klaten',
     lat: -7.7058,
     lng: 110.6008,
   },
@@ -96,7 +101,6 @@ export default function CheckoutPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState(false);
 
-  // Menyimpan pesanan yang sudah terbentuk agar bila pengiriman/pembayaran gagal, retry tidak membuat pesanan yatim baru
   const [pendingOrder, setPendingOrder] = useState<OrderResponse | null>(null);
 
   const subtotal = getSubtotal();
@@ -122,7 +126,7 @@ export default function CheckoutPage() {
   const selectedMetodePay = watch('metodePay');
 
   const handleSelectDemoLocation = (preset: (typeof DEMO_LOCATIONS)[number]) => {
-    if (pendingOrder) return; // Kunci lokasi bila order sudah dibuat dan sedang mode retry
+    if (pendingOrder) return;
     setEstimateError(null);
     setEstimate(null);
     setValue('alamatTujuan', preset.alamat, { shouldValidate: true });
@@ -162,7 +166,7 @@ export default function CheckoutPage() {
     );
   };
 
-  // Langkah 1: Pratinjau Estimasi Pengiriman (POST /api/deliveries/estimate tanpa idOrder)
+  // Langkah 1: Pratinjau Estimasi Pengiriman (POST /api/deliveries/estimate)
   const handleCalculateEstimate = async () => {
     setEstimateError(null);
     setSubmitError(null);
@@ -206,22 +210,11 @@ export default function CheckoutPage() {
     }
   };
 
-  // Helper Retry Idempoten untuk Pengiriman: Cek GET dulu, jika 404 baru POST, jika 409 ambil GET
+  // Langsung POST /api/deliveries; jika 409 (sudah ada saat retry), ambil via GET
   const ensureDeliveryCreated = async (
     idOrder: string,
     values: CheckoutFormValues
-  ): Promise<DeliveryResponse | null> => {
-    try {
-      const existing = await api.get<DeliveryResponse>(
-        `/api/deliveries/order/${idOrder}`
-      );
-      return existing.data;
-    } catch (err) {
-      if (!axios.isAxiosError(err) || err.response?.status !== 404) {
-        throw err;
-      }
-    }
-
+  ): Promise<DeliveryResponse> => {
     try {
       const created = await api.post<DeliveryResponse>('/api/deliveries', {
         idOrder,
@@ -241,22 +234,11 @@ export default function CheckoutPage() {
     }
   };
 
-  // Helper Retry Idempoten untuk Pembayaran: Cek GET dulu, jika 404 baru POST, jika 409 ambil GET
+  // Langsung POST /api/payments; jika 409 (sudah ada saat retry), ambil via GET
   const ensurePaymentCreated = async (
     idOrder: string,
     metodePay: string
-  ): Promise<PaymentResponse | null> => {
-    try {
-      const existing = await api.get<PaymentResponse>(
-        `/api/payments/order/${idOrder}`
-      );
-      return existing.data;
-    } catch (err) {
-      if (!axios.isAxiosError(err) || err.response?.status !== 404) {
-        throw err;
-      }
-    }
-
+  ): Promise<PaymentResponse> => {
     try {
       const created = await api.post<PaymentResponse>('/api/payments', {
         idOrder,
@@ -300,7 +282,6 @@ export default function CheckoutPage() {
     let activeOrder = pendingOrder;
 
     try {
-      // 1. Buat Order hanya jika belum ada pendingOrder dari percobaan sebelumnya
       if (!activeOrder) {
         const orderRes = await api.post<OrderResponse>('/api/orders/retail', {
           idUser: user.idUser,
@@ -321,19 +302,16 @@ export default function CheckoutPage() {
         }
       }
 
-      // 2. Pastikan Pengiriman Terbuat (Idempoten saat retry)
       const deliveryData = await ensureDeliveryCreated(
         activeOrder.idOrder,
         values
       );
 
-      // 3. Pastikan Pembayaran Terbuat (Idempoten saat retry)
       const paymentData = await ensurePaymentCreated(
         activeOrder.idOrder,
         values.metodePay
       );
 
-      // Simpan snapshot lengkap ke sessionStorage
       if (typeof window !== 'undefined') {
         sessionStorage.setItem(
           `lezzat-order-${activeOrder.idOrder}`,
@@ -479,7 +457,7 @@ export default function CheckoutPage() {
                   </button>
                 </div>
 
-                {/* Tombol Preset Lokasi Contoh sesuai A6 */}
+                {/* Tombol Preset Lokasi Contoh */}
                 <div className="rounded-2xl bg-[#f7f6f2] p-3.5 border border-slate-200/80">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-2">
                     <Sparkles className="w-3.5 h-3.5 text-[#174634]" />
@@ -660,18 +638,19 @@ export default function CheckoutPage() {
                         )}
                       </div>
 
-                      <div className="bg-white rounded-xl p-3 border border-emerald-100">
-                        <span className="text-slate-400 block text-[10px]">
+                      {/* Kartu Estimasi Tiba (WIB) yang sudah diperbarui */}
+                      <div className="bg-emerald-50/90 rounded-xl p-3 border border-emerald-300 shadow-2xs">
+                        <span className="text-emerald-800/80 font-medium block text-[10px] uppercase tracking-wider mb-0.5">
                           Estimasi Tiba (WIB)
                         </span>
-                        <span className="font-bold text-slate-900">
-                          {estimate.estimasiTiba}
+                        <span className="font-extrabold text-sm sm:text-base text-[#174634] block leading-tight">
+                          {formatEstimasiTiba(
+                            estimate.estimasiTiba,
+                            estimate.jadwalHariIni
+                          )}
                         </span>
-                        <span className="block text-[10px] text-slate-400">
-                          {estimate.jadwalHariIni
-                            ? 'Jadwal Hari Ini'
-                            : 'Jadwal Besok'}{' '}
-                          (~{estimate.menitPerjalanan} mnt)
+                        <span className="block text-[10px] text-emerald-700 font-medium mt-1">
+                          ~{estimate.menitPerjalanan} menit perjalanan
                         </span>
                       </div>
 
@@ -727,7 +706,7 @@ export default function CheckoutPage() {
                 )}
               </div>
 
-              {/* Bagian 2: Metode Pembayaran & Catatan (Sesuai A1.5 & A1.6) */}
+              {/* Bagian 2: Metode Pembayaran & Catatan */}
               <div className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
                 <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
                   <div className="w-8 h-8 rounded-xl bg-[#f2efe9] text-[#174634] flex items-center justify-center">
@@ -774,7 +753,6 @@ export default function CheckoutPage() {
                     </p>
                   </button>
 
-                  {/* Opsi Tunai dinonaktifkan dengan label Segera Hadir (A1.5 & A1.6) */}
                   <div
                     aria-disabled="true"
                     className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed"
@@ -812,7 +790,7 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {/* Kolom Kanan: Ringkasan Pesanan & Tombol Submit (Sesuai A1.2 & A1.3) */}
+            {/* Kolom Kanan: Ringkasan Pesanan & Tombol Submit */}
             <div className="bg-white rounded-3xl p-6 border border-slate-200 xl:sticky xl:top-6 space-y-5">
               <h2 className="font-serif-title text-xl font-bold text-slate-900">
                 Ringkasan Pesanan

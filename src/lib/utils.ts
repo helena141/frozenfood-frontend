@@ -3,6 +3,21 @@ import { twMerge } from 'tailwind-merge';
 import axios from 'axios';
 import { ProductCatalogResponse } from '@/types/api';
 
+const NAMA_BULAN_PENDEK = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'Mei',
+  'Jun',
+  'Jul',
+  'Agu',
+  'Sep',
+  'Okt',
+  'Nov',
+  'Des',
+];
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -36,6 +51,72 @@ export function formatTanggalIndo(dateInput?: string | Date | null): string {
     month: 'long',
     year: 'numeric',
   }).format(date);
+}
+
+/**
+ * Memformat estimasiTiba (contoh: "2026-11-08T11:35:00.351328")
+ * menjadi "Hari ini, sebelum 11.35" dengan membuang detik & milidetik.
+ */
+export function formatEstimasiTiba(
+  raw?: string | null,
+  jadwalHariIni?: boolean,
+  todayYmd?: string
+): string {
+  if (!raw) return 'Menunggu jadwal';
+  const trimmed = raw.trim();
+
+  // Menangkap format YYYY-MM-DDTHH:mm:ss atau dengan milidetik (.SSSSSS)
+  const isoMatch = trimmed.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/
+  );
+  if (isoMatch) {
+    const [, year, monthStr, dayStr, hour, minute] = isoMatch;
+    const ymd = `${year}-${monthStr}-${dayStr}`;
+    const jamMenit = `${hour}.${minute}`;
+
+    if (jadwalHariIni === true || (todayYmd && ymd === todayYmd)) {
+      return `Hari ini, sebelum ${jamMenit}`;
+    }
+    if (jadwalHariIni === false) {
+      return `Besok, sebelum ${jamMenit}`;
+    }
+
+    const dayNum = parseInt(dayStr, 10);
+    const monthIdx = parseInt(monthStr, 10) - 1;
+    const bulanArr = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const monthName = bulanArr[monthIdx] || monthStr;
+    return `${dayNum} ${monthName} ${year}, sebelum ${jamMenit}`;
+  }
+
+  // Jika formatnya hanya jam (HH:mm:ss)
+  const timeOnlyMatch = trimmed.match(/^(\d{2}):(\d{2})/);
+  if (timeOnlyMatch) {
+    const [, hour, minute] = timeOnlyMatch;
+    const prefix = jadwalHariIni === false ? 'Besok' : 'Hari ini';
+    return `${prefix}, sebelum ${hour}.${minute}`;
+  }
+
+  return trimmed.replace(/:\d{2}(\.\d+)?$/, '');
+}
+
+/**
+ * Memformat timestamp umum (paidAt / expiredAt) tanpa detik & milidetik
+ * Contoh: "2026-11-08T11:35:00.351328" -> "8 Nov 2026, 11.35 WIB"
+ */
+export function formatWaktuSingkat(raw?: string | null): string {
+  if (!raw) return '-';
+  const trimmed = raw.trim();
+  const isoMatch = trimmed.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/
+  );
+  if (isoMatch) {
+    const [, year, monthStr, dayStr, hour, minute] = isoMatch;
+    const dayNum = parseInt(dayStr, 10);
+    const monthIdx = parseInt(monthStr, 10) - 1;
+    const monthName = NAMA_BULAN_PENDEK[monthIdx] || monthStr;
+    return `${dayNum} ${monthName} ${year}, ${hour}.${minute} WIB`;
+  }
+  return trimmed.replace(/:\d{2}(\.\d+)?$/, '');
 }
 
 export function getErrorMessage(

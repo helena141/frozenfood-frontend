@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useParams, usePathname } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -21,23 +21,20 @@ import {
   Package,
   Info,
   Sparkles,
-  Snowflake,
-  Home,
-  Search,
-  ShoppingBag,
-  Heart,
-  Store,
-  LogOut,
-  LogIn,
 } from 'lucide-react';
 import { api } from '@/lib/axios';
-import { formatRupiah, getErrorMessage } from '@/lib/utils';
-import { useAuthStore } from '@/store/auth-store';
+import {
+  formatRupiah,
+  formatEstimasiTiba,
+  formatWaktuSingkat,
+  getErrorMessage,
+} from '@/lib/utils';
 import {
   DeliveryResponse,
   PaymentResponse,
   OrderResponse,
 } from '@/types/api';
+import ShopSidebar from '@/components/shop/sidebar';
 
 const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 
@@ -75,176 +72,67 @@ const ALL_KNOWN_STATUSES = [
   'DIBATALKAN',
 ];
 
-// Sidebar aman dengan Suspense
-function ShopSidebarContent() {
-  const pathname = usePathname();
-  const { user, logout } = useAuthStore();
-
-  const navItems = [
-    { label: 'Beranda', href: '/', icon: Home, active: pathname === '/' },
-    {
-      label: 'Jelajahi',
-      href: '/#katalog',
-      icon: Search,
-      active: pathname.startsWith('/products'),
-    },
-    {
-      label: 'Pesanan',
-      href: '/checkout',
-      icon: ShoppingBag,
-      active: pathname.startsWith('/orders') || pathname === '/checkout',
-    },
-    { label: 'Favorit', href: '/#populer', icon: Heart, active: false },
-  ];
-
-  return (
-    <aside className="lezzat-sidebar">
-      <div>
-        <Link href="/" className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 rounded-full bg-[#174634] flex items-center justify-center text-white shadow-sm">
-            <Snowflake className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="block font-serif-title text-2xl font-bold text-slate-900 leading-none">
-              Lezzat
-            </span>
-            <span className="block text-[9px] font-semibold tracking-[0.22em] text-slate-400 uppercase mt-1">
-              FROZEN FOOD
-            </span>
-          </div>
-        </Link>
-
-        <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-400 uppercase px-3 mb-3">
-          MENU UTAMA
-        </p>
-        <nav className="space-y-1.5">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={`flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-medium transition-colors ${
-                  item.active
-                    ? 'bg-[#174634] text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <span className="flex items-center gap-3">
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
-                </span>
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
-
-      <div className="space-y-4">
-        <div className="rounded-2xl bg-[#f2efe9] p-4">
-          <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[#174634] mb-3 shadow-xs">
-            <Store className="w-4 h-4" />
-          </div>
-          <p className="text-xs font-bold text-slate-900 mb-1">
-            Punya usaha kuliner?
-          </p>
-          <p className="text-[11px] text-slate-600 leading-relaxed mb-3">
-            Dapatkan harga khusus mitra.
-          </p>
-          <Link
-            href="/register"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-[#174634] hover:underline"
-          >
-            <span>Pelajari</span>
-            <span>→</span>
-          </Link>
-        </div>
-
-        {user ? (
-          <button
-            type="button"
-            onClick={() => logout()}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-500 hover:text-red-600 transition-colors cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Keluar akun ({user.nama})</span>
-          </button>
-        ) : (
-          <Link
-            href="/login"
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-[#174634] hover:underline"
-          >
-            <LogIn className="w-4 h-4" />
-            <span>Masuk ke akun</span>
-          </Link>
-        )}
-      </div>
-    </aside>
-  );
-}
-
-function ShopSidebar() {
-  return (
-    <Suspense fallback={<div className="w-64 bg-white border-r h-screen" />}>
-      <ShopSidebarContent />
-    </Suspense>
-  );
-}
-
-function normalizePaymentResponse(raw: unknown): PaymentResponse | null {
+function parseValidPayment(raw: unknown): PaymentResponse | null {
   if (!raw) return null;
-  const candidate = Array.isArray(raw) ? raw[0] : raw;
-  if (!candidate || typeof candidate !== 'object') return null;
+  const item = Array.isArray(raw) ? raw[0] : raw;
+  if (!item || typeof item !== 'object') return null;
 
-  const obj = candidate as Partial<PaymentResponse> & {
-    data?: PaymentResponse;
-  };
-  const target = obj.data && typeof obj.data === 'object' ? obj.data : obj;
+  const candidate = item as Record<string, unknown>;
+  const target =
+    candidate.data && typeof candidate.data === 'object'
+      ? (candidate.data as Record<string, unknown>)
+      : candidate;
 
-  if (!target.idPayment && !target.gatewayRef) {
+  const gatewayRef =
+    typeof target.gatewayRef === 'string' ? target.gatewayRef.trim() : '';
+  const idPayment =
+    typeof target.idPayment === 'string' ? target.idPayment.trim() : '';
+
+  if (!gatewayRef && !idPayment) {
     return null;
   }
 
   return {
-    idPayment: String(target.idPayment || ''),
+    idPayment,
     idOrder: String(target.idOrder || ''),
-    gatewayRef: String(target.gatewayRef || ''),
-    metodePay: String(target.metodePay || 'QRIS'),
+    gatewayRef,
+    metodePay: String(target.metodePay || '-'),
     jumlah: typeof target.jumlah === 'number' ? target.jumlah : 0,
     status: String(target.status || 'PENDING'),
-    paidAt: target.paidAt ?? null,
-    expiredAt: target.expiredAt ?? null,
+    paidAt: typeof target.paidAt === 'string' ? target.paidAt : null,
+    expiredAt: typeof target.expiredAt === 'string' ? target.expiredAt : null,
     createdAt: String(target.createdAt || ''),
     updatedAt: String(target.updatedAt || ''),
   };
 }
 
-function normalizeDeliveryResponse(raw: unknown): DeliveryResponse | null {
+function parseValidDelivery(raw: unknown): DeliveryResponse | null {
   if (!raw) return null;
-  const candidate = Array.isArray(raw) ? raw[0] : raw;
-  if (!candidate || typeof candidate !== 'object') return null;
+  const item = Array.isArray(raw) ? raw[0] : raw;
+  if (!item || typeof item !== 'object') return null;
 
-  const obj = candidate as Partial<DeliveryResponse> & {
-    data?: DeliveryResponse;
-  };
-  const target = obj.data && typeof obj.data === 'object' ? obj.data : obj;
+  const candidate = item as Record<string, unknown>;
+  const target =
+    candidate.data && typeof candidate.data === 'object'
+      ? (candidate.data as Record<string, unknown>)
+      : candidate;
 
   if (!target.idDelivery && !target.statusDelivery) {
     return null;
   }
 
-  return target as DeliveryResponse;
+  return target as unknown as DeliveryResponse;
 }
 
 function OrderStatusContent() {
   const params = useParams<{ id: string }>();
   const idOrder = params?.id || '';
 
+  const [todayYmd, setTodayYmd] = useState<string>('');
   const [cachedOrder, setCachedOrder] = useState<OrderResponse | null>(null);
   const [cachedPayment, setCachedPayment] = useState<PaymentResponse | null>(
     null
   );
-  const [manualGatewayRef, setManualGatewayRef] = useState('MOCK-GATEWAY-REF-001');
   const [isDownloadingNota, setIsDownloadingNota] = useState(false);
   const [notaError, setNotaError] = useState<string | null>(null);
 
@@ -253,6 +141,12 @@ function OrderStatusContent() {
   const [isCreatingPay, setIsCreatingPay] = useState(false);
 
   useEffect(() => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    setTodayYmd(`${yyyy}-${mm}-${dd}`);
+
     if (typeof window !== 'undefined' && idOrder) {
       const raw = sessionStorage.getItem(`lezzat-order-${idOrder}`);
       if (raw) {
@@ -265,19 +159,16 @@ function OrderStatusContent() {
             setCachedOrder(parsed.order);
           }
           if (parsed.payment) {
-            const norm = normalizePaymentResponse(parsed.payment);
-            if (norm) {
-              setCachedPayment(norm);
-              if (norm.gatewayRef) setManualGatewayRef(norm.gatewayRef);
-            }
+            setCachedPayment(parseValidPayment(parsed.payment));
           }
         } catch {
-          // Abaikan
+          // Abaikan jika gagal parse JSON
         }
       }
     }
   }, [idOrder]);
 
+  // 1. Fetch Pengiriman (404 = kondisi kosong)
   const {
     data: deliveryData,
     isLoading: isLoadingDelivery,
@@ -289,7 +180,7 @@ function OrderStatusContent() {
     queryFn: async () => {
       try {
         const res = await api.get(`/api/deliveries/order/${idOrder}`);
-        return normalizeDeliveryResponse(res.data);
+        return parseValidDelivery(res.data);
       } catch (err) {
         if (axios.isAxiosError(err) && err.response?.status === 404) {
           return null;
@@ -301,6 +192,7 @@ function OrderStatusContent() {
     retry: false,
   });
 
+  // 2. Fetch Pembayaran dari Backend (404 atau objek kosong = belum ada pembayaran)
   const {
     data: paymentData,
     isLoading: isLoadingPayment,
@@ -312,7 +204,7 @@ function OrderStatusContent() {
     queryFn: async () => {
       try {
         const res = await api.get(`/api/payments/order/${idOrder}`);
-        return normalizePaymentResponse(res.data);
+        return parseValidPayment(res.data);
       } catch (err) {
         if (axios.isAxiosError(err) && err.response?.status === 404) {
           return null;
@@ -332,7 +224,7 @@ function OrderStatusContent() {
     refetchPayment();
   };
 
-  const handleCreateMissingPayment = async (metodePay: 'QRIS' | 'TRANSFER') => {
+  const handleCreatePayment = async (metodePay: 'QRIS' | 'TRANSFER') => {
     if (!idOrder) return;
     setSimulatePayError(null);
     setIsCreatingPay(true);
@@ -341,21 +233,21 @@ function OrderStatusContent() {
         idOrder,
         metodePay,
       });
-      const created = normalizePaymentResponse(res.data);
+      const created = parseValidPayment(res.data);
       if (created) {
         setCachedPayment(created);
-        if (created.gatewayRef) setManualGatewayRef(created.gatewayRef);
       }
       await refetchPayment();
     } catch (error) {
       setSimulatePayError(
-        getErrorMessage(error, 'Gagal membuat pembayaran untuk pesanan ini.')
+        getErrorMessage(error, 'Gagal membuat pembayaran ke backend.')
       );
     } finally {
       setIsCreatingPay(false);
     }
   };
 
+  // 3. Unduh Nota PDF via Blob
   const handleDownloadNota = async () => {
     if (!idOrder) return;
     setNotaError(null);
@@ -377,17 +269,22 @@ function OrderStatusContent() {
       window.URL.revokeObjectURL(downloadUrl);
     } catch (error) {
       setNotaError(
-        getErrorMessage(error, 'Gagal mengunduh Nota PDF.')
+        getErrorMessage(
+          error,
+          'Gagal mengunduh Nota PDF. Pastikan pesanan valid.'
+        )
       );
     } finally {
       setIsDownloadingNota(false);
     }
   };
 
+  // 4. Mode Demo: Simulasikan Pembayaran Lunas
   const handleSimulatePaymentSuccess = async () => {
-    const activeRef = payment?.gatewayRef || manualGatewayRef;
-    if (!activeRef) {
-      setSimulatePayError('Kode referensi gatewayRef wajib diisi.');
+    if (!payment || !payment.gatewayRef) {
+      setSimulatePayError(
+        'Data gatewayRef dari backend belum ada. Silakan buat pembayaran terlebih dahulu.'
+      );
       return;
     }
 
@@ -395,13 +292,10 @@ function OrderStatusContent() {
     setIsSimulatingPay(true);
 
     try {
-      const nominalKonfirmasi =
-        payment && payment.jumlah > 0 ? payment.jumlah : totalTagihanAkhir;
-
       await api.post('/api/payments/callback', {
-        gatewayRef: activeRef,
+        gatewayRef: payment.gatewayRef,
         status: 'LUNAS',
-        jumlahDikonfirmasi: nominalKonfirmasi,
+        jumlahDikonfirmasi: payment.jumlah,
       });
       await refetchPayment();
       await refetchDelivery();
@@ -441,6 +335,14 @@ function OrderStatusContent() {
     payment?.status === 'LUNAS' ||
     payment?.status === 'PAID' ||
     payment?.status === 'SUCCESS';
+
+  const formattedEstimasi = delivery?.estimasiTiba
+    ? formatEstimasiTiba(
+        delivery.estimasiTiba,
+        delivery.metodeDeliv === 'SAMEDAY' ? true : undefined,
+        todayYmd
+      )
+    : null;
 
   return (
     <div className="lezzat-shell">
@@ -534,6 +436,7 @@ function OrderStatusContent() {
 
         {!isLoading && !isErrorDelivery && !isErrorPayment && (
           <div className="space-y-6">
+            {/* Stepper Status Pengiriman */}
             <section className="bg-white rounded-3xl p-6 border border-slate-200">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-4 mb-6 border-b border-slate-100">
                 <div className="flex items-center gap-2.5">
@@ -555,10 +458,15 @@ function OrderStatusContent() {
                   </div>
                 </div>
 
-                {delivery?.estimasiTiba && (
-                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-[#174634]">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>Estimasi Tiba: {delivery.estimasiTiba}</span>
+                {formattedEstimasi && (
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-200 text-xs text-[#174634]">
+                    <Clock className="w-4 h-4 shrink-0 text-[#174634]" />
+                    <span>
+                      Estimasi Tiba:{' '}
+                      <strong className="font-extrabold text-sm">
+                        {formattedEstimasi}
+                      </strong>
+                    </span>
                   </div>
                 )}
               </div>
@@ -635,6 +543,7 @@ function OrderStatusContent() {
               )}
             </section>
 
+            {/* Grid 2 Kolom: Pengiriman & Pembayaran */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <section className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -695,18 +604,51 @@ function OrderStatusContent() {
                         </span>
                       </div>
                     </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3.5 rounded-2xl bg-[#f7f6f2]">
+                        <span className="text-slate-400 block text-[10px] mb-1">
+                          Nama Pengantar / Kurir
+                        </span>
+                        <span className="font-bold text-slate-900 flex items-center gap-1">
+                          <User className="w-3.5 h-3.5 text-slate-400" />
+                          {delivery.namaPengantar || 'Belum ditugaskan'}
+                        </span>
+                      </div>
+
+                      {/* Kotak Estimasi Tiba dengan Format Bersih, Bold & Warna Aksen Hijau Gelap */}
+                      <div className="p-3.5 rounded-2xl bg-emerald-50/90 border border-emerald-200">
+                        <span className="text-emerald-800/75 font-medium block text-[10px] uppercase tracking-wider mb-1">
+                          Estimasi Tiba (WIB)
+                        </span>
+                        <span className="font-extrabold text-sm sm:text-base text-[#174634] block leading-tight">
+                          {formattedEstimasi || 'Menunggu jadwal'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {delivery.alasanKeputusan && (
+                      <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+                        <span className="text-slate-400 block text-[10px] mb-1">
+                          Alasan Keputusan Sistem
+                        </span>
+                        <p className="text-slate-700 leading-relaxed">
+                          {delivery.alasanKeputusan}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </section>
 
-              {/* Kartu Informasi Pembayaran dengan input manual gatewayRef cadangan */}
+              {/* Kartu Informasi Pembayaran (Read-Only dari Backend) */}
               <section className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                     <CreditCard className="w-4 h-4 text-[#174634]" />
                     <span>Informasi Pembayaran</span>
                   </h2>
-                  {payment && payment.status && (
+                  {payment && (
                     <span
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
                         isPaymentSettled
@@ -721,20 +663,38 @@ function OrderStatusContent() {
 
                 {!payment ? (
                   <div className="rounded-2xl bg-[#f7f6f2] p-5 text-center space-y-3">
-                    <p className="text-xs text-slate-500">
-                      Belum ada pembayaran tercatat untuk pesanan ini.
+                    <p className="text-xs text-slate-600">
+                      Belum ada data pembayaran di backend untuk pesanan ini.
+                      Klik tombol di bawah untuk memanggil{' '}
+                      <code className="font-mono font-bold">
+                        POST /api/payments
+                      </code>{' '}
+                      dan menghasilkan{' '}
+                      <code className="font-mono">gatewayRef</code>:
                     </p>
                     {simulatePayError && (
-                      <p className="text-xs text-red-600">{simulatePayError}</p>
+                      <p className="text-xs text-red-600 font-medium">
+                        {simulatePayError}
+                      </p>
                     )}
                     <div className="flex flex-wrap justify-center gap-2">
                       <button
                         type="button"
                         disabled={isCreatingPay}
-                        onClick={() => handleCreateMissingPayment('QRIS')}
-                        className="px-3.5 py-2 rounded-xl bg-[#174634] hover:bg-[#113527] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
+                        onClick={() => handleCreatePayment('QRIS')}
+                        className="px-4 py-2.5 rounded-xl bg-[#174634] hover:bg-[#113527] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
                       >
-                        {isCreatingPay ? 'Membuat...' : 'Buat Pembayaran QRIS'}
+                        {isCreatingPay
+                          ? 'Memproses ke Backend...'
+                          : 'Buat Pembayaran QRIS'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isCreatingPay}
+                        onClick={() => handleCreatePayment('TRANSFER')}
+                        className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-xs font-semibold cursor-pointer"
+                      >
+                        Buat Pembayaran TRANSFER
                       </button>
                     </div>
                   </div>
@@ -760,18 +720,13 @@ function OrderStatusContent() {
                       </div>
                     </div>
 
-                    {/* Input manual gatewayRef agar bisa diedit jika kosong */}
-                    <div>
-                      <label className="block text-[10px] text-slate-400 mb-1">
-                        Kode Referensi Gateway (gatewayRef) — Dapat diedit:
-                      </label>
-                      <input
-                        type="text"
-                        value={payment.gatewayRef || manualGatewayRef}
-                        onChange={(e) => setManualGatewayRef(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-mono font-bold text-slate-900 bg-white focus:border-[#174634] focus:outline-none"
-                        placeholder="Contoh: MOCK-REF-12345"
-                      />
+                    <div className="p-3.5 rounded-2xl bg-[#f7f6f2]">
+                      <span className="text-slate-400 block text-[10px]">
+                        Kode Referensi Gateway (gatewayRef dari Backend)
+                      </span>
+                      <span className="font-mono font-bold text-slate-900 text-xs">
+                        {payment.gatewayRef}
+                      </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -780,7 +735,9 @@ function OrderStatusContent() {
                           Waktu Pembayaran (paidAt)
                         </span>
                         <span className="font-medium text-slate-800">
-                          {payment.paidAt || 'Belum dibayar'}
+                          {payment.paidAt
+                            ? formatWaktuSingkat(payment.paidAt)
+                            : 'Belum dibayar'}
                         </span>
                       </div>
                       <div>
@@ -788,7 +745,9 @@ function OrderStatusContent() {
                           Batas Waktu (expiredAt)
                         </span>
                         <span className="font-medium text-slate-800">
-                          {payment.expiredAt || '-'}
+                          {payment.expiredAt
+                            ? formatWaktuSingkat(payment.expiredAt)
+                            : '-'}
                         </span>
                       </div>
                     </div>
@@ -819,6 +778,117 @@ function OrderStatusContent() {
                 )}
               </section>
             </div>
+
+            {/* Rincian Item & Perhitungan Total Akhir */}
+            <section className="bg-white rounded-3xl p-6 border border-slate-200">
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Package className="w-4 h-4 text-[#174634]" />
+                  <span>Rincian Item & Total Tagihan Akhir</span>
+                </h2>
+                <button
+                  type="button"
+                  onClick={handleDownloadNota}
+                  disabled={isDownloadingNota}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#174634] hover:underline cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Unduh Nota Resmi (PDF)</span>
+                </button>
+              </div>
+
+              {cachedOrder && cachedOrder.items?.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-400">
+                          <th className="pb-2 font-semibold">Nama Produk</th>
+                          <th className="pb-2 font-semibold">Batch FEFO</th>
+                          <th className="pb-2 font-semibold">Harga Satuan</th>
+                          <th className="pb-2 font-semibold">Qty</th>
+                          <th className="pb-2 font-semibold text-right">
+                            Subtotal Barang
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {cachedOrder.items.map((item) => (
+                          <tr key={item.idOrderItem}>
+                            <td className="py-3 font-bold text-slate-900">
+                              {item.namaProduk}
+                            </td>
+                            <td className="py-3 font-mono text-[11px] text-slate-500">
+                              {item.idProdBatch}
+                            </td>
+                            <td className="py-3 text-slate-600">
+                              {formatRupiah(item.hargaSatuanSnapshot)}
+                            </td>
+                            <td className="py-3 font-semibold text-slate-800">
+                              {item.quantity}
+                            </td>
+                            <td className="py-3 font-bold text-slate-900 text-right">
+                              {formatRupiah(item.subtotalItem)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-200 space-y-2 text-xs">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Subtotal Barang</span>
+                      <span className="font-semibold text-slate-900">
+                        {formatRupiah(subtotalBarang)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Ongkos Kirim (Dari Data Pengiriman)</span>
+                      <span className="font-semibold text-[#174634]">
+                        {!delivery
+                          ? 'Belum ada pengiriman'
+                          : isOngkirPendingAdmin
+                            ? 'Menunggu konfirmasi admin'
+                            : formatRupiah(delivery.ongkir)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm font-bold text-slate-900 pt-2 border-t border-slate-100">
+                      <span>Total Tagihan Akhir (Barang + Ongkir)</span>
+                      <span className="text-[#174634]">
+                        {isOngkirPendingAdmin
+                          ? `${formatRupiah(subtotalBarang)} + Menunggu konfirmasi admin`
+                          : formatRupiah(totalTagihanAkhir)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {delivery && (
+                    <div className="flex justify-between text-xs p-3 rounded-2xl bg-[#f7f6f2]">
+                      <span className="text-slate-600">
+                        Ongkos Kirim (Dari Data Pengiriman):
+                      </span>
+                      <span className="font-bold text-[#174634]">
+                        {isOngkirPendingAdmin
+                          ? 'Menunggu konfirmasi admin'
+                          : formatRupiah(delivery.ongkir)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-start gap-2.5 rounded-2xl bg-[#f7f6f2] p-4 text-xs text-slate-600">
+                    <Info className="w-4 h-4 text-[#174634] shrink-0 mt-0.5" />
+                    <span>
+                      Rincian item barang tersimpan pada sesi perangkat saat
+                      checkout. Untuk melihat rincian nota lengkap pada
+                      perangkat/sesi lain, klik tombol{' '}
+                      <strong>Unduh Nota PDF</strong> di atas.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </section>
           </div>
         )}
       </main>
