@@ -34,9 +34,51 @@ export interface ProductCatalogResponse {
   volume: number;
   gambar: string | null;
   isActive: boolean;
-  totalStokOnline: number;
-  createdAt: string;
-  updatedAt: string;
+  totalStock?: number;
+  totalStokOnline?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// === INVENTORI BATCH FEFO DTO ===
+export interface ProductBatchRequest {
+  productId: string;
+  stokAwal: number;
+  tanggalExp: string;
+  hargaOverride?: number | null;
+  diskon?: number | null;
+}
+
+export interface ProductBatchResponse {
+  idProdBatch: string;
+  productId: string;
+  namaProduk: string;
+  stokAwal: number;
+  stokOnline: number;
+  tanggalExp: string;
+  hargaOverride: number | null;
+  diskon: number | null;
+}
+
+// === PELANGGAN (PROFIL & ADMIN CUSTOMER) DTO ===
+export interface CustomerResponse {
+  idUser: string;
+  nama: string;
+  email: string;
+  noTelp: string;
+  alamat: string;
+  tipeAkun: TipeAkun;
+  fotoProfil: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface CustomerUpdateRequest {
+  nama?: string;
+  email?: string;
+  noTelp?: string;
+  alamat?: string;
+  passwordBaru?: string;
 }
 
 export interface ProductUpsertRequest {

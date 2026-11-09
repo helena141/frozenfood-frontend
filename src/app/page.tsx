@@ -114,7 +114,10 @@ export default function HomeCatalogPage() {
             </button>
 
             {user ? (
-              <div className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-full pl-1.5 pr-3.5 py-1">
+              <Link
+                href="/profile"
+                className="flex items-center gap-2.5 bg-white border border-slate-200 hover:border-[#174634]/40 rounded-full pl-1.5 pr-3.5 py-1 transition-colors"
+              >
                 <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-800 text-xs font-bold flex items-center justify-center">
                   {userInitials}
                 </div>
@@ -126,7 +129,7 @@ export default function HomeCatalogPage() {
                     Pelanggan {user.tipeAkun}
                   </p>
                 </div>
-              </div>
+              </Link>
             ) : (
               <Link
                 href="/login"

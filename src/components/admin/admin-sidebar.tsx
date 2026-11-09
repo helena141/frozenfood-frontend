@@ -8,6 +8,7 @@ import {
   BarChart3,
   Truck,
   Package,
+  Users,
   Store,
   LogOut,
   LogIn,
@@ -43,6 +44,12 @@ function AdminSidebarInner() {
       href: '/admin/products',
       icon: Package,
       active: pathname.startsWith('/admin/products'),
+    },
+    {
+      label: 'Kelola Pelanggan',
+      href: '/admin/customers',
+      icon: Users,
+      active: pathname.startsWith('/admin/customers'),
     },
   ];
 

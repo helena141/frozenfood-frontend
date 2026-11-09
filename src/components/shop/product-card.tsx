@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Heart, Plus, Snowflake } from 'lucide-react';
 import { ProductCatalogResponse } from '@/types/api';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, getProductStock } from '@/lib/utils';
 import { useCartStore } from '@/store/cart-store';
 
 interface ProductCardProps {
@@ -15,12 +15,7 @@ interface ProductCardProps {
 export default function ProductCard({ product, badgeText }: ProductCardProps) {
   const { items, addItem } = useCartStore();
 
-  // Pengaman jika di runtime backend mengirim null/undefined pada totalStokOnline atau isActive
-  const safeStock =
-    typeof product.totalStokOnline === 'number' &&
-    !Number.isNaN(product.totalStokOnline)
-      ? product.totalStokOnline
-      : 99;
+  const safeStock = getProductStock(product);
 
   const isProductActive = product.isActive ?? true;
 

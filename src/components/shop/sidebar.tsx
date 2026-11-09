@@ -8,7 +8,7 @@ import {
   Home,
   Search,
   ShoppingBag,
-  Heart,
+  User,
   Store,
   LogOut,
   LogIn,
@@ -47,7 +47,12 @@ function ShopSidebarInner() {
       icon: ShoppingBag,
       active: pathname.startsWith('/orders') || pathname === '/checkout',
     },
-    { label: 'Favorit', href: '/#populer', icon: Heart, active: false },
+    {
+      label: 'Profil Saya',
+      href: '/profile',
+      icon: User,
+      active: pathname.startsWith('/profile'),
+    },
   ];
 
   return (

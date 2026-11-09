@@ -24,17 +24,23 @@ export function cn(...inputs: ClassValue[]) {
 
 export function hasExplicitStock(product: ProductCatalogResponse): boolean {
   return (
-    typeof product.totalStokOnline === 'number' &&
-    !Number.isNaN(product.totalStokOnline)
+    (typeof product.totalStock === 'number' && !Number.isNaN(product.totalStock)) ||
+    (typeof product.totalStokOnline === 'number' &&
+      !Number.isNaN(product.totalStokOnline))
   );
 }
 
 export function getProductStock(product: ProductCatalogResponse): number {
-  if (hasExplicitStock(product)) {
-    return product.totalStokOnline as number;
+  if (typeof product.totalStock === 'number' && !Number.isNaN(product.totalStock)) {
+    return product.totalStock;
   }
-  // Hanya digunakan sebagai batas atas tombol (+) di keranjang bila backend tidak mengirim field stok
-  return 99;
+  if (
+    typeof product.totalStokOnline === 'number' &&
+    !Number.isNaN(product.totalStokOnline)
+  ) {
+    return product.totalStokOnline;
+  }
+  return 0;
 }
 
 export function formatRupiah(nominal: number): string {
@@ -123,6 +129,10 @@ export function formatWaktuSingkat(raw?: string | null): string {
     return `${dayNum} ${monthName} ${year}, ${hour}.${minute} WIB`;
   }
   return trimmed.replace(/:\d{2}(\.\d+)?$/, '');
+}
+
+export function formatDateTimeId(raw?: string | null): string {
+  return formatWaktuSingkat(raw);
 }
 
 export function getErrorMessage(

@@ -1,383 +1,300 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
+  ShoppingBag,
   Search,
-  Bell,
-  Clock,
   ArrowRight,
-  LayoutGrid,
-  Star,
-  Box,
-  Snowflake,
-  AlertCircle,
+  Package,
+  Clock,
   RefreshCw,
+  AlertCircle,
+  FileText,
+  LogIn,
 } from 'lucide-react';
 import { api } from '@/lib/axios';
-import { formatTanggalIndo, getErrorMessage } from '@/lib/utils';
-import { ProductCatalogResponse } from '@/types/api';
+import { formatRupiah, formatWaktuSingkat, getErrorMessage } from '@/lib/utils';
+import { OrderResponse } from '@/types/api';
 import { useAuthStore } from '@/store/auth-store';
 import ShopSidebar from '@/components/shop/sidebar';
-import ProductCard from '@/components/shop/product-card';
 import CartPanel from '@/components/shop/cart-panel';
 
-export default function HomeCatalogPage() {
+export default function OrdersHistoryPage() {
+  const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const [searchKeyword, setSearchKeyword] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('SEMUA');
-  const [todayDate, setTodayDate] = useState<string>('');
   const [mounted, setMounted] = useState(false);
+  const [trackOrderId, setTrackOrderId] = useState('');
+  const [trackError, setTrackError] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    setTodayDate(formatTanggalIndo(new Date()));
   }, []);
 
   const activeUser = mounted ? user : null;
 
   const {
-    data: products = [],
+    data: myOrders = [],
     isLoading,
     isError,
     error,
     refetch,
-  } = useQuery<ProductCatalogResponse[]>({
-    queryKey: ['products'],
+  } = useQuery<OrderResponse[]>({
+    queryKey: ['my-orders', activeUser?.idUser],
     queryFn: async () => {
-      const response = await api.get<ProductCatalogResponse[]>('/api/products');
-      return response.data;
+      const res = await api.get<OrderResponse[]>('/api/orders/my');
+      return res.data;
     },
+    enabled: Boolean(activeUser),
   });
 
-  // Menghitung daftar kategori unik beserta jumlah produknya
-  const categories = useMemo(() => {
-    const counts: Record<string, number> = {};
-    products.forEach((p) => {
-      const kat = p.kategori || 'Lainnya';
-      counts[kat] = (counts[kat] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, count]) => ({ name, count }));
-  }, [products]);
-
-  // Filter produk berdasarkan pencarian dan kategori
-  const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      const matchCategory =
-        selectedCategory === 'SEMUA' || product.kategori === selectedCategory;
-      const keyword = searchKeyword.trim().toLowerCase();
-      const matchKeyword =
-        !keyword ||
-        product.namaProduk.toLowerCase().includes(keyword) ||
-        (product.deskripsiProduk &&
-          product.deskripsiProduk.toLowerCase().includes(keyword)) ||
-        (product.kategori && product.kategori.toLowerCase().includes(keyword));
-      return matchCategory && matchKeyword;
-    });
-  }, [products, selectedCategory, searchKeyword]);
-
-  const userInitials = activeUser?.nama
-    ? activeUser.nama
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase()
-    : 'LZ';
+  const handleTrackById = (e: React.FormEvent) => {
+    e.preventDefault();
+    setTrackError(null);
+    const cleanId = trackOrderId.trim().replace(/^#/, '');
+    if (!cleanId) {
+      setTrackError('Masukkan ID Pesanan (UUID) yang ingin dilacak.');
+      return;
+    }
+    router.push(`/orders/${cleanId}`);
+  };
 
   return (
     <div className="lezzat-shell">
-      {/* Kolom 1: Sidebar Kiri */}
       <ShopSidebar />
 
-      {/* Kolom 2: Konten Utama Katalog */}
       <main className="lezzat-main">
-        {/* Top Bar: Search & Profil */}
-        <header className="flex items-center justify-between gap-4 mb-8">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="search"
-              value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="Cari nugget, dimsum, sosis..."
-              aria-label="Cari produk"
-              className="w-full rounded-2xl bg-white border border-slate-200 pl-11 pr-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#174634] focus:outline-none"
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              aria-label="Notifikasi"
-              className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50"
-            >
-              <Bell className="w-4 h-4" />
-            </button>
-
-            {activeUser ? (
-              <div className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-full pl-1.5 pr-3.5 py-1">
-                <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-800 text-xs font-bold flex items-center justify-center">
-                  {userInitials}
-                </div>
-                <div className="hidden sm:block text-left">
-                  <p className="text-xs font-bold text-slate-900 leading-none">
-                    {activeUser.nama}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Pelanggan {activeUser.tipeAkun}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <Link
-                href="/login"
-                className="px-4 py-2 rounded-full bg-[#174634] text-white text-xs font-semibold hover:bg-[#113527]"
-              >
-                Masuk
-              </Link>
-            )}
-          </div>
-        </header>
-
-        {/* Baris Sapaan & Jam Operasional */}
-        <section className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
           <div>
-            <p className="text-xs text-slate-500 mb-1 min-h-[16px]">
-              {todayDate}
+            <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">
+              RIWAYAT & PELACAKAN PESANAN
             </p>
-            <h1 className="font-serif-title text-3xl sm:text-4xl font-bold text-slate-900">
-              Selamat datang,{' '}
-              {activeUser ? activeUser.nama.split(' ')[0] : 'Sahabat Lezzat'}.
+            <h1 className="font-serif-title text-2xl sm:text-3xl font-bold text-slate-900">
+              Pesanan Saya
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Mau masak praktis apa hari ini?
-            </p>
           </div>
 
-          <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white border border-slate-200 text-xs text-slate-600 self-start sm:self-auto">
-            <Clock className="w-3.5 h-3.5 text-[#174634]" />
-            <span>Antar hari ini, 09:00–21:00 WIB</span>
-          </div>
-        </section>
-
-        {/* Hero Promo Banner sesuai Figma */}
-        <section className="relative rounded-3xl bg-[#174634] text-white p-7 sm:p-10 mb-8 overflow-hidden">
-          <div className="relative z-10 max-w-md">
-            <span className="inline-block px-3 py-1 rounded-full bg-[#e26d53] text-white text-[10px] font-bold tracking-wider uppercase mb-4">
-              PROMO MINGGU INI
-            </span>
-            <h2 className="font-serif-title text-3xl sm:text-4xl font-bold leading-tight mb-3">
-              Makin banyak, makin hemat.
-            </h2>
-            <p className="text-xs sm:text-sm text-emerald-50/85 mb-6">
-              Stok kebutuhan lauk beku pilihan keluarga dengan pengiriman terjaga
-              dingin sampai ke pintu rumahmu.
-            </p>
-            <a
-              href="#katalog"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white text-[#174634] text-xs font-bold hover:bg-emerald-50 transition-colors"
-            >
-              <span>Belanja sekarang</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </a>
-          </div>
-        </section>
-
-        {/* Filter Kategori (PILIHAN KATEGORI) */}
-        <section id="katalog" className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">
-                PILIHAN KATEGORI
-              </p>
-              <h2 className="font-serif-title text-xl font-bold text-slate-900">
-                Mau makan apa?
-              </h2>
-            </div>
-            {selectedCategory !== 'SEMUA' && (
-              <button
-                type="button"
-                onClick={() => setSelectedCategory('SEMUA')}
-                className="text-xs font-semibold text-[#174634] hover:underline cursor-pointer"
-              >
-                Reset filter
-              </button>
-            )}
-          </div>
-
-          <div
-            className="grid gap-3"
-            style={{
-              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-            }}
-          >
+          {activeUser && (
             <button
               type="button"
-              onClick={() => setSelectedCategory('SEMUA')}
-              className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                selectedCategory === 'SEMUA'
-                  ? 'border-[#174634] bg-[#174634]/5'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
-              }`}
+              onClick={() => refetch()}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer self-start sm:self-auto"
             >
-              <div className="w-9 h-9 rounded-xl bg-[#174634] text-white flex items-center justify-center shrink-0">
-                <LayoutGrid className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-900 truncate">
-                  Semua Produk
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  {products.length} produk
-                </p>
-              </div>
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Muat Ulang</span>
             </button>
+          )}
+        </div>
 
-            {categories.map((cat, idx) => (
-              <button
-                key={cat.name}
-                type="button"
-                onClick={() => setSelectedCategory(cat.name)}
-                className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                  selectedCategory === cat.name
-                    ? 'border-[#174634] bg-[#174634]/5'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-              >
-                <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    idx % 2 === 0
-                      ? 'bg-amber-50 text-amber-600'
-                      : 'bg-sky-50 text-sky-600'
-                  }`}
-                >
-                  {idx % 2 === 0 ? (
-                    <Star className="w-4 h-4" />
-                  ) : (
-                    <Box className="w-4 h-4" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-900 truncate">
-                    {cat.name}
-                  </p>
-                  <p className="text-[11px] text-slate-400">
-                    {cat.count} produk
-                  </p>
-                </div>
-              </button>
+        {/* Form Lacak Cepat via ID Order */}
+        <section className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 mb-6">
+          <h2 className="text-sm font-bold text-slate-900 mb-1">
+            Lacak Pesanan dengan ID Order
+          </h2>
+          <p className="text-xs text-slate-500 mb-3.5">
+            Masukkan kode UUID pesanan untuk melihat status pengiriman, pembayaran, atau mengunduh Nota PDF.
+          </p>
+
+          <form
+            onSubmit={handleTrackById}
+            className="flex flex-col sm:flex-row gap-2.5"
+          >
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={trackOrderId}
+                onChange={(e) => setTrackOrderId(e.target.value)}
+                placeholder="Contoh: 348bb928-30f4-4492-8c99-33ec3f5553e5"
+                className="w-full rounded-xl border border-slate-200 pl-10 pr-4 py-2.5 text-xs sm:text-sm font-mono text-slate-900 focus:border-[#174634] focus:outline-none"
+              />
+            </div>
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#174634] hover:bg-[#113527] text-white text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <span>Lihat Status Pesanan</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </form>
+
+          {trackError && (
+            <p className="mt-2 text-xs text-red-600 font-medium">{trackError}</p>
+          )}
+        </section>
+
+        {/* Daftar Riwayat Pesanan Akun */}
+        {!activeUser ? (
+          <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center my-6">
+            <LogIn className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+            <h3 className="text-base font-bold text-slate-900 mb-1">
+              Masuk untuk Melihat Riwayat Pesanan
+            </h3>
+            <p className="text-xs text-slate-500 mb-5 max-w-md mx-auto">
+              Silakan masuk ke akun Lezzat Anda agar daftar seluruh pesanan B2C maupun B2B otomatis ditampilkan di sini.
+            </p>
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#174634] text-white text-xs font-semibold hover:bg-[#113527]"
+            >
+              <span>Masuk ke Akun</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        ) : isLoading ? (
+          <div className="space-y-4 animate-pulse">
+            {[1, 2, 3].map((n) => (
+              <div
+                key={n}
+                className="bg-white rounded-3xl p-6 border border-slate-200 h-36"
+              />
             ))}
           </div>
-        </section>
-
-        {/* Daftar Produk (PALING DISUKAI / Produk populer) */}
-        <section id="populer">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">
-                PALING DISUKAI
-              </p>
-              <h2 className="font-serif-title text-xl font-bold text-slate-900">
-                Produk populer
-              </h2>
-            </div>
-          </div>
-
-          {/* 1. KONDISI LOADING */}
-          {isLoading && (
-            <div
-              className="grid gap-4"
-              style={{
-                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-              }}
+        ) : isError ? (
+          <div className="bg-white rounded-3xl p-8 border border-red-200 text-center my-6">
+            <AlertCircle className="w-8 h-8 text-red-600 mx-auto mb-2" />
+            <h3 className="text-sm font-bold text-slate-900 mb-1">
+              Gagal Memuat Riwayat Pesanan
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              {getErrorMessage(error, 'Tidak dapat mengambil daftar pesanan Anda.')}
+            </p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#174634] text-white text-xs font-semibold cursor-pointer"
             >
-              {[1, 2, 3, 4].map((skeleton) => (
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Coba Lagi</span>
+            </button>
+          </div>
+        ) : myOrders.length === 0 ? (
+          <div className="bg-white rounded-3xl p-10 border border-slate-200 text-center my-4">
+            <ShoppingBag className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+            <h3 className="text-sm font-bold text-slate-800 mb-1">
+              Belum Ada Riwayat Pesanan
+            </h3>
+            <p className="text-xs text-slate-500 mb-5">
+              Anda belum memiliki riwayat pesanan. Yuk mulai belanja produk frozen food pilihan!
+            </p>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#174634] text-white text-xs font-semibold hover:bg-[#113527]"
+            >
+              <span>Belanja Sekarang</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {myOrders.map((order) => {
+              const totalQty =
+                order.items?.reduce((acc, i) => acc + i.quantity, 0) || 0;
+              const isPaid =
+                order.status === 'DIBAYAR' ||
+                order.status === 'LUNAS' ||
+                order.status === 'DIPROSES' ||
+                order.status === 'SELESAI';
+
+              return (
                 <div
-                  key={skeleton}
-                  className="bg-white rounded-3xl p-4 border border-slate-100 animate-pulse"
+                  key={order.idOrder}
+                  className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 hover:border-[#174634]/50 transition-all"
                 >
-                  <div className="h-44 w-full rounded-2xl bg-slate-200 mb-3" />
-                  <div className="h-3 w-20 bg-slate-200 rounded mb-2" />
-                  <div className="h-4 w-3/4 bg-slate-200 rounded mb-4" />
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-100">
-                    <div className="h-4 w-24 bg-slate-200 rounded" />
-                    <div className="h-9 w-9 rounded-full bg-slate-200" />
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-[#f2efe9] text-[#174634] flex items-center justify-center">
+                        <Package className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-slate-900">
+                            #{order.idOrder.slice(0, 8)}...
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-[#f2efe9] text-[#174634] text-[10px] font-bold uppercase">
+                            {order.tipeOrder}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                          <Clock className="w-3 h-3" />
+                          {order.createdAt
+                            ? formatWaktuSingkat(order.createdAt)
+                            : '-'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
+                        isPaid
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {order.status}
+                    </span>
+                  </div>
+
+                  {/* Ringkasan Item */}
+                  {order.items && order.items.length > 0 && (
+                    <div className="mb-4 space-y-1.5">
+                      {order.items.slice(0, 3).map((item) => (
+                        <div
+                          key={item.idOrderItem}
+                          className="flex items-center justify-between text-xs text-slate-600"
+                        >
+                          <span className="truncate pr-2">
+                            <strong className="text-slate-800">
+                              {item.quantity}x
+                            </strong>{' '}
+                            {item.namaProduk}{' '}
+                            <span className="font-mono text-[10px] text-slate-400">
+                              ({item.idProdBatch})
+                            </span>
+                          </span>
+                          <span className="font-semibold text-slate-800 shrink-0">
+                            {formatRupiah(item.subtotalItem)}
+                          </span>
+                        </div>
+                      ))}
+                      {order.items.length > 3 && (
+                        <p className="text-[11px] text-slate-400">
+                          +{order.items.length - 3} baris batch lainnya...
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                    <div>
+                      <span className="text-[11px] text-slate-400 block">
+                        Total Tagihan ({totalQty} unit)
+                      </span>
+                      <span className="text-sm font-bold text-[#174634]">
+                        {formatRupiah(order.totalTagihan)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/orders/${order.idOrder}`}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#174634] hover:bg-[#113527] text-white text-xs font-semibold transition-colors"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Detail, Pengiriman & Nota</span>
+                      </Link>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* 2. KONDISI ERROR */}
-          {isError && (
-            <div className="rounded-3xl bg-white border border-red-200 p-8 text-center max-w-md mx-auto my-6">
-              <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-3">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <h3 className="text-sm font-bold text-slate-900 mb-1">
-                Gagal memuat katalog produk
-              </h3>
-              <p className="text-xs text-slate-500 mb-4">
-                {getErrorMessage(
-                  error,
-                  'Pastikan server backend Spring Boot di port 8080 sudah menyala.'
-                )}
-              </p>
-              <button
-                type="button"
-                onClick={() => refetch()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#174634] text-white text-xs font-semibold hover:bg-[#113527] cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Coba Lagi</span>
-              </button>
-            </div>
-          )}
-
-          {/* 3. KONDISI KOSONG */}
-          {!isLoading && !isError && filteredProducts.length === 0 && (
-            <div className="rounded-3xl bg-white border border-slate-200 p-10 text-center my-4">
-              <Snowflake className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <h3 className="text-sm font-bold text-slate-800 mb-1">
-                Produk tidak ditemukan
-              </h3>
-              <p className="text-xs text-slate-500">
-                {searchKeyword || selectedCategory !== 'SEMUA'
-                  ? 'Tidak ada produk yang cocok dengan pencarian atau kategori yang dipilih.'
-                  : 'Belum ada produk di dalam database katalog.'}
-              </p>
-            </div>
-          )}
-
-          {/* 4. KONDISI DATA TERSEDIA */}
-          {!isLoading && !isError && filteredProducts.length > 0 && (
-            <div
-              className="grid gap-4"
-              style={{
-                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-              }}
-            >
-              {filteredProducts.map((product, index) => (
-                <ProductCard
-                  key={product.idProduk}
-                  product={product}
-                  badgeText={
-                    index === 0
-                      ? 'TERLARIS'
-                      : index === 1
-                        ? 'FAVORIT'
-                        : undefined
-                  }
-                />
-              ))}
-            </div>
-          )}
-        </section>
+              );
+            })}
+          </div>
+        )}
       </main>
 
-      {/* Kolom 3: Panel Keranjang Kanan */}
       <CartPanel />
     </div>
   );

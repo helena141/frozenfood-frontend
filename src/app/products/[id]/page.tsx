@@ -140,7 +140,7 @@ function ProductDetailContent() {
                     <Scale className="w-3.5 h-3.5" /> Berat
                   </span>
                   <span className="font-bold text-slate-800">
-                    {product.berat} kg
+                    {product.berat} g
                   </span>
                 </div>
                 <div>
@@ -148,7 +148,7 @@ function ProductDetailContent() {
                     <Box className="w-3.5 h-3.5" /> Volume
                   </span>
                   <span className="font-bold text-slate-800">
-                    {product.volume ?? 0} L
+                    {product.volume ?? 0} ml
                   </span>
                 </div>
                 <div>

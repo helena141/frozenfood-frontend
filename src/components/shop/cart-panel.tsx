@@ -11,7 +11,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useCartStore } from '@/store/cart-store';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, getProductStock } from '@/lib/utils';
 
 export default function CartPanel() {
   const { items, updateQty, removeItem, getTotalItems, getSubtotal } =
@@ -60,11 +60,7 @@ export default function CartPanel() {
           <div className="space-y-4">
             {displayItems.map(({ product, qty }) => {
               const safeQty = Number.isNaN(qty) || qty < 1 ? 1 : qty;
-              const maxStock =
-                typeof product.totalStokOnline === 'number' &&
-                !Number.isNaN(product.totalStokOnline)
-                  ? product.totalStokOnline
-                  : 99;
+              const maxStock = Math.max(getProductStock(product), safeQty);
 
               return (
                 <div

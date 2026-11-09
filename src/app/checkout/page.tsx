@@ -330,14 +330,22 @@ export default function CheckoutPage() {
     try {
       // 1. Buat Order hanya jika belum ada pendingOrder dari percobaan sebelumnya
       if (!activeOrder) {
-        const orderRes = await api.post<OrderResponse>('/api/orders/retail', {
-          idUser: user.idUser,
-          items: items.map((i) => ({
-            idProduk: i.product.idProduk,
-            quantity: Number.isNaN(i.qty) || i.qty < 1 ? 1 : i.qty,
-          })),
-          catatan: values.catatan || undefined,
-        });
+        const mappedItems = items.map((i) => ({
+          idProduk: i.product.idProduk,
+          quantity: Number.isNaN(i.qty) || i.qty < 1 ? 1 : i.qty,
+        }));
+
+        const orderRes =
+          user.tipeAkun === 'B2B'
+            ? await api.post<OrderResponse>('/api/orders/checkout', {
+                items: mappedItems,
+              })
+            : await api.post<OrderResponse>('/api/orders/retail', {
+                idUser: user.idUser,
+                items: mappedItems,
+                catatan: values.catatan || undefined,
+              });
+
         activeOrder = orderRes.data;
         setPendingOrder(activeOrder);
 
@@ -436,7 +444,9 @@ export default function CheckoutPage() {
 
         <div className="mb-6">
           <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">
-            CHECKOUT PESANAN ECERAN
+            {user?.tipeAkun === 'B2B'
+              ? 'CHECKOUT PESANAN GROSIR MITRA (B2B AUTO-TIERING & FEFO)'
+              : 'CHECKOUT PESANAN ECERAN (B2C)'}
           </p>
           <h1 className="font-serif-title text-2xl sm:text-3xl font-bold text-slate-900">
             Pengiriman & Pembayaran

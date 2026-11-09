@@ -170,6 +170,27 @@ function OrderStatusContent() {
     }
   }, [idOrder]);
 
+  // 0. Fetch Detail Order beserta Items dari Backend (GET /api/orders/{idOrder})
+  const {
+    data: orderData,
+    refetch: refetchOrder,
+  } = useQuery<OrderResponse | null>({
+    queryKey: ['order-detail', idOrder],
+    queryFn: async () => {
+      try {
+        const res = await api.get<OrderResponse>(`/api/orders/${idOrder}`);
+        return res.data;
+      } catch (err) {
+        if (axios.isAxiosError(err) && err.response?.status === 404) {
+          return null;
+        }
+        return null;
+      }
+    },
+    enabled: Boolean(idOrder),
+    retry: false,
+  });
+
   // 1. Fetch Pengiriman (404 = kosong)
   const {
     data: deliveryData,
@@ -220,10 +241,12 @@ function OrderStatusContent() {
     retry: false,
   });
 
+  const activeOrder = orderData ?? cachedOrder ?? null;
   const delivery = deliveryData ?? null;
   const payment = paymentData ?? cachedPayment ?? null;
 
   const handleRefreshAll = () => {
+    refetchOrder();
     refetchDelivery();
     refetchPayment();
   };
@@ -323,8 +346,8 @@ function OrderStatusContent() {
   const isUnknownStatus =
     Boolean(currentStatus) && !ALL_KNOWN_STATUSES.includes(currentStatus);
 
-  const subtotalBarang = cachedOrder
-    ? cachedOrder.items.reduce((sum, item) => sum + item.subtotalItem, 0)
+  const subtotalBarang = activeOrder
+    ? activeOrder.items.reduce((sum, item) => sum + item.subtotalItem, 0)
     : 0;
 
   const isOngkirPendingAdmin =
@@ -843,7 +866,7 @@ function OrderStatusContent() {
                 </button>
               </div>
 
-              {cachedOrder && cachedOrder.items?.length > 0 ? (
+              {activeOrder && activeOrder.items?.length > 0 ? (
                 <div className="space-y-4">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
@@ -859,7 +882,7 @@ function OrderStatusContent() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {cachedOrder.items.map((item) => (
+                        {activeOrder.items.map((item) => (
                           <tr key={item.idOrderItem}>
                             <td className="py-3 font-bold text-slate-900">
                               {item.namaProduk}
