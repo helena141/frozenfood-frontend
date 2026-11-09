@@ -88,6 +88,18 @@ const checkoutSchema = z.object({
 
 type CheckoutFormValues = z.infer<typeof checkoutSchema>;
 
+// Helper untuk mengambil elemen pertama dari respons GET /api/payments/order/{idOrder} yang berupa Array
+function extractFirstPayment(raw: unknown): PaymentResponse | null {
+  if (!raw) return null;
+  const item = Array.isArray(raw) ? raw[0] : raw;
+  if (!item || typeof item !== 'object') return null;
+
+  const obj = item as Partial<PaymentResponse>;
+  if (!obj.idPayment && !obj.gatewayRef) return null;
+
+  return obj as PaymentResponse;
+}
+
 export default function CheckoutPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
@@ -99,8 +111,10 @@ export default function CheckoutPage() {
   const [isEstimating, setIsEstimating] = useState(false);
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [infoNotice, setInfoNotice] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState(false);
 
+  // Menyimpan pesanan yang sudah dibuat agar jika langkah berikutnya gagal, retry tidak membuat pesanan yatim baru
   const [pendingOrder, setPendingOrder] = useState<OrderResponse | null>(null);
 
   const subtotal = getSubtotal();
@@ -166,10 +180,11 @@ export default function CheckoutPage() {
     );
   };
 
-  // Langkah 1: Pratinjau Estimasi Pengiriman (POST /api/deliveries/estimate)
+  // Langkah 1: Pratinjau Estimasi Pengiriman (POST /api/deliveries/estimate tanpa idOrder)
   const handleCalculateEstimate = async () => {
     setEstimateError(null);
     setSubmitError(null);
+    setInfoNotice(null);
     const lat = Number(getValues('latitudeTujuan'));
     const lng = Number(getValues('longitudeTujuan'));
 
@@ -210,11 +225,24 @@ export default function CheckoutPage() {
     }
   };
 
-  // Langsung POST /api/deliveries; jika 409 (sudah ada saat retry), ambil via GET
+  // Helper Idempoten untuk Pengiriman: Cek GET dulu, jika 404 baru POST, jika 409 ambil GET
   const ensureDeliveryCreated = async (
     idOrder: string,
     values: CheckoutFormValues
   ): Promise<DeliveryResponse> => {
+    try {
+      const existing = await api.get<DeliveryResponse>(
+        `/api/deliveries/order/${idOrder}`
+      );
+      if (existing.data && existing.data.idDelivery) {
+        return existing.data;
+      }
+    } catch (err) {
+      if (!axios.isAxiosError(err) || err.response?.status !== 404) {
+        throw err;
+      }
+    }
+
     try {
       const created = await api.post<DeliveryResponse>('/api/deliveries', {
         idOrder,
@@ -234,11 +262,25 @@ export default function CheckoutPage() {
     }
   };
 
-  // Langsung POST /api/payments; jika 409 (sudah ada saat retry), ambil via GET
+  // Helper Idempoten untuk Pembayaran: GET /api/payments/order/{idOrder} mengembalikan ARRAY (200 dengan [] jika belum ada)
   const ensurePaymentCreated = async (
     idOrder: string,
     metodePay: string
   ): Promise<PaymentResponse> => {
+    try {
+      const existingRes = await api.get<PaymentResponse[]>(
+        `/api/payments/order/${idOrder}`
+      );
+      const existingPayment = extractFirstPayment(existingRes.data);
+      if (existingPayment) {
+        return existingPayment;
+      }
+    } catch (err) {
+      if (!axios.isAxiosError(err) || err.response?.status !== 404) {
+        throw err;
+      }
+    }
+
     try {
       const created = await api.post<PaymentResponse>('/api/payments', {
         idOrder,
@@ -247,18 +289,22 @@ export default function CheckoutPage() {
       return created.data;
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 409) {
-        const existing = await api.get<PaymentResponse>(
+        const existingRes = await api.get<PaymentResponse[]>(
           `/api/payments/order/${idOrder}`
         );
-        return existing.data;
+        const existingPayment = extractFirstPayment(existingRes.data);
+        if (existingPayment) {
+          return existingPayment;
+        }
       }
       throw err;
     }
   };
 
-  // Langkah 2: Eksekusi Checkout dengan Perlindungan Anti-Pesanan Yatim
+  // Langkah 2: Eksekusi Checkout sesuai aturan MOTOR_TOKO vs PIHAK_KETIGA
   const onSubmit = async (values: CheckoutFormValues) => {
     setSubmitError(null);
+    setInfoNotice(null);
 
     if (!user) {
       router.push('/login');
@@ -282,6 +328,7 @@ export default function CheckoutPage() {
     let activeOrder = pendingOrder;
 
     try {
+      // 1. Buat Order hanya jika belum ada pendingOrder dari percobaan sebelumnya
       if (!activeOrder) {
         const orderRes = await api.post<OrderResponse>('/api/orders/retail', {
           idUser: user.idUser,
@@ -302,11 +349,40 @@ export default function CheckoutPage() {
         }
       }
 
+      // 2. Buat / Pastikan Pengiriman
       const deliveryData = await ensureDeliveryCreated(
         activeOrder.idOrder,
         values
       );
 
+      const isThirdPartyPending =
+        deliveryData.pelaksana === 'PIHAK_KETIGA' ||
+        deliveryData.statusDelivery === 'MENUNGGU_KONFIRMASI_ADMIN';
+
+      // 3. Jika PIHAK_KETIGA (MENUNGGU_KONFIRMASI_ADMIN): JANGAN panggil POST /api/payments
+      if (isThirdPartyPending) {
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(
+            `lezzat-order-${activeOrder.idOrder}`,
+            JSON.stringify({
+              order: activeOrder,
+              delivery: deliveryData,
+              payment: null,
+            })
+          );
+        }
+
+        setInfoNotice(
+          'Menunggu konfirmasi ongkir dari admin. Anda dapat membayar setelah dikonfirmasi'
+        );
+        clearCart();
+        setTimeout(() => {
+          router.push(`/orders/${activeOrder!.idOrder}`);
+        }, 1200);
+        return;
+      }
+
+      // 4. Jika MOTOR_TOKO: Lanjutkan panggil POST /api/payments (Backend menghitung Payment.jumlah = barang + ongkir)
       const paymentData = await ensurePaymentCreated(
         activeOrder.idOrder,
         values.metodePay
@@ -341,7 +417,7 @@ export default function CheckoutPage() {
 
   const finalOngkirNumber =
     estimate && !isPihakKetiga ? estimate.ongkir : 0;
-  const totalAkhirBarangDanOngkir = subtotal + finalOngkirNumber;
+  const pratinjauTotalKeseluruhan = subtotal + finalOngkirNumber;
 
   return (
     <div className="lezzat-shell">
@@ -367,7 +443,7 @@ export default function CheckoutPage() {
           </h1>
         </div>
 
-        {items.length === 0 && !pendingOrder ? (
+        {items.length === 0 && !pendingOrder && !infoNotice ? (
           <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center max-w-lg mx-auto my-8">
             <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <h2 className="font-serif-title text-xl font-bold text-slate-900 mb-1">
@@ -412,12 +488,12 @@ export default function CheckoutPage() {
                   </div>
                   <div className="bg-white/10 rounded-2xl p-3.5">
                     <p className="font-bold text-white mb-1">
-                      Tarif Ongkir & Jam Operasional
+                      Tarif Ongkir Online & Jam Operasional
                     </p>
                     <p>
-                      • <strong>≤ 5 km:</strong> Gratis Ongkir!
+                      • <strong>≤ 5 km:</strong> GRATIS!
                       <br />• <strong>Mulai 6 km:</strong> Rp 10.000 + Rp
-                      1.000/km (Maks Rp 35.000).
+                      1.000/km (Maks Rp 35.000), ikut dibayar online.
                       <br />• <strong>Jam 09.00–21.00 WIB:</strong> Pesan
                       sebelum 15.00 WIB dikirim hari ini, lewat 15.00 WIB
                       dikirim besok.
@@ -627,18 +703,20 @@ export default function CheckoutPage() {
                         ) : (
                           <>
                             <span className="font-bold text-[#174634]">
-                              {formatRupiah(estimate.ongkir)}
+                              {estimate.ongkir === 0
+                                ? 'GRATIS'
+                                : formatRupiah(estimate.ongkir)}
                             </span>
                             <span className="block text-[10px] text-slate-400">
                               {estimate.ongkirBersifatEstimasi
                                 ? 'Bersifat Estimasi'
-                                : 'Tarif Tetap'}
+                                : 'Dibayar Online'}
                             </span>
                           </>
                         )}
                       </div>
 
-                      {/* Kartu Estimasi Tiba (WIB) yang sudah diperbarui */}
+                      {/* Kartu Estimasi Tiba (WIB) */}
                       <div className="bg-emerald-50/90 rounded-xl p-3 border border-emerald-300 shadow-2xs">
                         <span className="text-emerald-800/80 font-medium block text-[10px] uppercase tracking-wider mb-0.5">
                           Estimasi Tiba (WIB)
@@ -673,8 +751,9 @@ export default function CheckoutPage() {
                         <Info className="w-4 h-4 shrink-0 mt-0.5" />
                         <span>
                           Pengiriman ini menggunakan{' '}
-                          <strong>PIHAK_KETIGA</strong>. Ongkir belum final dan{' '}
-                          <strong>menunggu konfirmasi admin</strong>.
+                          <strong>PIHAK_KETIGA</strong>. Menunggu konfirmasi
+                          ongkir dari admin. Anda dapat membayar setelah
+                          dikonfirmasi.
                         </span>
                       </div>
                     )}
@@ -714,62 +793,51 @@ export default function CheckoutPage() {
                   </div>
                   <div>
                     <h2 className="text-sm font-bold text-slate-900">
-                      2. Metode Pembayaran & Catatan
+                      2. Metode Pembayaran Online & Catatan
                     </h2>
                     <p className="text-[11px] text-slate-500">
-                      Pilih metode pembayaran simulasi yang tersedia
+                      {isPihakKetiga
+                        ? 'Untuk pengiriman pihak ketiga, pembayaran dilakukan di halaman detail pesanan setelah ongkir dikonfirmasi admin'
+                        : 'Subtotal barang dan ongkir dibayar sekaligus secara online'}
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setValue('metodePay', 'QRIS')}
-                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                      selectedMetodePay === 'QRIS'
-                        ? 'border-[#174634] bg-[#174634]/5'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <p className="text-xs font-bold text-slate-900">QRIS</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Pembayaran digital via kode referensi
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setValue('metodePay', 'TRANSFER')}
-                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                      selectedMetodePay === 'TRANSFER'
-                        ? 'border-[#174634] bg-[#174634]/5'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <p className="text-xs font-bold text-slate-900">TRANSFER</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Transfer rekening bank
-                    </p>
-                  </button>
-
-                  <div
-                    aria-disabled="true"
-                    className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed"
-                  >
-                    <div className="flex items-center justify-between gap-1">
-                      <p className="text-xs font-bold text-slate-500">
-                        Tunai (COD)
+                {!isPihakKetiga && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setValue('metodePay', 'QRIS')}
+                      className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                        selectedMetodePay === 'QRIS'
+                          ? 'border-[#174634] bg-[#174634]/5'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <p className="text-xs font-bold text-slate-900">QRIS</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Pembayaran digital via kode referensi
                       </p>
-                      <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[9px] font-bold uppercase">
-                        Segera hadir
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Bayar tunai ke pengantar belum tersedia
-                    </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setValue('metodePay', 'TRANSFER')}
+                      className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                        selectedMetodePay === 'TRANSFER'
+                          ? 'border-[#174634] bg-[#174634]/5'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <p className="text-xs font-bold text-slate-900">
+                        TRANSFER
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Transfer rekening bank
+                      </p>
+                    </button>
                   </div>
-                </div>
+                )}
 
                 <div>
                   <label
@@ -829,33 +897,45 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="flex justify-between text-slate-500">
-                  <span>Ongkos Kirim</span>
+                  <span>Ongkir</span>
                   <span className="font-medium text-[#174634] text-right">
                     {!estimate
                       ? 'Hitung estimasi dulu'
                       : isPihakKetiga
                         ? 'Menunggu konfirmasi admin'
-                        : formatRupiah(estimate.ongkir)}
+                        : estimate.ongkir === 0
+                          ? 'GRATIS'
+                          : formatRupiah(estimate.ongkir)}
                   </span>
                 </div>
 
                 <div className="flex justify-between text-sm font-bold text-slate-900 pt-3 border-t border-slate-200">
-                  <span>Total Tagihan Akhir</span>
-                  <span className="text-right">
+                  <span>Total Keseluruhan</span>
+                  <span className="text-right text-[#174634]">
                     {!estimate
                       ? formatRupiah(subtotal)
                       : isPihakKetiga
-                        ? `${formatRupiah(subtotal)} + Ongkir Admin`
-                        : formatRupiah(totalAkhirBarangDanOngkir)}
+                        ? 'Menunggu konfirmasi admin'
+                        : formatRupiah(pratinjauTotalKeseluruhan)}
                   </span>
                 </div>
               </div>
 
-              {pendingOrder && (
+              {pendingOrder && !infoNotice && (
                 <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3.5 text-xs text-amber-800">
                   Pesanan <strong>#{pendingOrder.idOrder.slice(0, 8)}...</strong>{' '}
                   sudah tercatat. Klik tombol di bawah untuk melanjutkan
                   pembuatan pengiriman & pembayaran tanpa memotong stok ulang.
+                </div>
+              )}
+
+              {infoNotice && (
+                <div
+                  role="status"
+                  className="flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs font-semibold text-[#174634]"
+                >
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{infoNotice}</span>
                 </div>
               )}
 
@@ -871,7 +951,12 @@ export default function CheckoutPage() {
 
               <button
                 type="submit"
-                disabled={isSubmitting || !estimate || Boolean(estimateError)}
+                disabled={
+                  isSubmitting ||
+                  !estimate ||
+                  Boolean(estimateError) ||
+                  Boolean(infoNotice)
+                }
                 className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#174634] hover:bg-[#113527] disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold py-3.5 px-5 text-xs transition-colors cursor-pointer disabled:cursor-not-allowed"
               >
                 {pendingOrder ? (
@@ -889,7 +974,9 @@ export default function CheckoutPage() {
                     <span>
                       {isSubmitting
                         ? 'Memproses Pesanan...'
-                        : 'Buat Pesanan & Bayar'}
+                        : isPihakKetiga
+                          ? 'Buat Pesanan (Menunggu Konfirmasi Ongkir)'
+                          : 'Buat Pesanan & Bayar'}
                     </span>
                   </>
                 )}

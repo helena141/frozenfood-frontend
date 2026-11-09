@@ -15,7 +15,12 @@ import {
   Box,
 } from 'lucide-react';
 import { api } from '@/lib/axios';
-import { formatRupiah, getErrorMessage, getProductStock } from '@/lib/utils';
+import {
+  formatRupiah,
+  getErrorMessage,
+  getProductStock,
+  hasExplicitStock,
+} from '@/lib/utils';
 import { ProductCatalogResponse } from '@/types/api';
 import { useCartStore } from '@/store/cart-store';
 import ShopSidebar from '@/components/shop/sidebar';
@@ -43,6 +48,7 @@ function ProductDetailContent() {
     enabled: Boolean(productId),
   });
 
+  const explicitStock = product ? hasExplicitStock(product) : false;
   const safeStock = product ? getProductStock(product) : 0;
 
   return (
@@ -134,7 +140,7 @@ function ProductDetailContent() {
                     <Scale className="w-3.5 h-3.5" /> Berat
                   </span>
                   <span className="font-bold text-slate-800">
-                    {product.berat} gram
+                    {product.berat} kg
                   </span>
                 </div>
                 <div>
@@ -142,20 +148,26 @@ function ProductDetailContent() {
                     <Box className="w-3.5 h-3.5" /> Volume
                   </span>
                   <span className="font-bold text-slate-800">
-                    {product.volume} ml
+                    {product.volume ?? 0} L
                   </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block mb-0.5">
                     Stok Online
                   </span>
-                  <span
-                    className={`font-bold ${
-                      safeStock > 0 ? 'text-emerald-700' : 'text-red-600'
-                    }`}
-                  >
-                    {safeStock > 0 ? `${safeStock} tersedia` : 'Habis'}
-                  </span>
+                  {explicitStock ? (
+                    <span
+                      className={`font-bold ${
+                        safeStock > 0 ? 'text-emerald-700' : 'text-red-600'
+                      }`}
+                    >
+                      {safeStock > 0 ? `${safeStock} tersedia` : 'Habis'}
+                    </span>
+                  ) : (
+                    <span className="font-bold text-slate-700">
+                      Sesuai Batch FEFO
+                    </span>
+                  )}
                 </div>
               </div>
 

@@ -22,11 +22,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export function hasExplicitStock(product: ProductCatalogResponse): boolean {
+  return (
+    typeof product.totalStokOnline === 'number' &&
+    !Number.isNaN(product.totalStokOnline)
+  );
+}
+
 export function getProductStock(product: ProductCatalogResponse): number {
-  const rawStock = product.totalStokOnline;
-  if (typeof rawStock === 'number' && !Number.isNaN(rawStock)) {
-    return rawStock;
+  if (hasExplicitStock(product)) {
+    return product.totalStokOnline as number;
   }
+  // Hanya digunakan sebagai batas atas tombol (+) di keranjang bila backend tidak mengirim field stok
   return 99;
 }
 
@@ -83,8 +90,7 @@ export function formatEstimasiTiba(
 
     const dayNum = parseInt(dayStr, 10);
     const monthIdx = parseInt(monthStr, 10) - 1;
-    const bulanArr = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    const monthName = bulanArr[monthIdx] || monthStr;
+    const monthName = NAMA_BULAN_PENDEK[monthIdx] || monthStr;
     return `${dayNum} ${monthName} ${year}, sebelum ${jamMenit}`;
   }
 

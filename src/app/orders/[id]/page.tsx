@@ -72,6 +72,7 @@ const ALL_KNOWN_STATUSES = [
   'DIBATALKAN',
 ];
 
+// Helper untuk mengambil elemen pertama dari respons GET /api/payments/order/{idOrder} yang berupa Array
 function parseValidPayment(raw: unknown): PaymentResponse | null {
   if (!raw) return null;
   const item = Array.isArray(raw) ? raw[0] : raw;
@@ -133,6 +134,7 @@ function OrderStatusContent() {
   const [cachedPayment, setCachedPayment] = useState<PaymentResponse | null>(
     null
   );
+  const [selectedPayMethod, setSelectedPayMethod] = useState<'QRIS' | 'TRANSFER'>('QRIS');
   const [isDownloadingNota, setIsDownloadingNota] = useState(false);
   const [notaError, setNotaError] = useState<string | null>(null);
 
@@ -162,13 +164,13 @@ function OrderStatusContent() {
             setCachedPayment(parseValidPayment(parsed.payment));
           }
         } catch {
-          // Abaikan jika gagal parse JSON
+          // Abaikan
         }
       }
     }
   }, [idOrder]);
 
-  // 1. Fetch Pengiriman (404 = kondisi kosong)
+  // 1. Fetch Pengiriman (404 = kosong)
   const {
     data: deliveryData,
     isLoading: isLoadingDelivery,
@@ -192,7 +194,7 @@ function OrderStatusContent() {
     retry: false,
   });
 
-  // 2. Fetch Pembayaran dari Backend (404 atau objek kosong = belum ada pembayaran)
+  // 2. Fetch Pembayaran dari Backend: Mengembalikan ARRAY (200 dengan [] jika belum ada pembayaran)
   const {
     data: paymentData,
     isLoading: isLoadingPayment,
@@ -203,7 +205,9 @@ function OrderStatusContent() {
     queryKey: ['payment-order', idOrder],
     queryFn: async () => {
       try {
-        const res = await api.get(`/api/payments/order/${idOrder}`);
+        const res = await api.get<PaymentResponse[]>(
+          `/api/payments/order/${idOrder}`
+        );
         return parseValidPayment(res.data);
       } catch (err) {
         if (axios.isAxiosError(err) && err.response?.status === 404) {
@@ -224,6 +228,7 @@ function OrderStatusContent() {
     refetchPayment();
   };
 
+  // Membuat pembayaran (POST /api/payments)
   const handleCreatePayment = async (metodePay: 'QRIS' | 'TRANSFER') => {
     if (!idOrder) return;
     setSimulatePayError(null);
@@ -343,6 +348,8 @@ function OrderStatusContent() {
         todayYmd
       )
     : null;
+
+  const isDeliveryCancelled = currentStatus === 'DIBATALKAN';
 
   return (
     <div className="lezzat-shell">
@@ -596,7 +603,9 @@ function OrderStatusContent() {
                           </span>
                         ) : (
                           <span className="font-bold text-[#174634] block">
-                            {formatRupiah(delivery.ongkir)}
+                            {delivery.ongkir === 0
+                              ? 'GRATIS'
+                              : formatRupiah(delivery.ongkir)}
                           </span>
                         )}
                         <span className="block text-[10px] text-slate-500">
@@ -616,7 +625,6 @@ function OrderStatusContent() {
                         </span>
                       </div>
 
-                      {/* Kotak Estimasi Tiba dengan Format Bersih, Bold & Warna Aksen Hijau Gelap */}
                       <div className="p-3.5 rounded-2xl bg-emerald-50/90 border border-emerald-200">
                         <span className="text-emerald-800/75 font-medium block text-[10px] uppercase tracking-wider mb-1">
                           Estimasi Tiba (WIB)
@@ -626,6 +634,17 @@ function OrderStatusContent() {
                         </span>
                       </div>
                     </div>
+
+                    {isOngkirPendingAdmin && (
+                      <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900">
+                        <p className="font-semibold mb-0.5">
+                          Menunggu konfirmasi ongkir dari admin.
+                        </p>
+                        <p className="text-[11px] text-amber-800">
+                          Anda dapat melakukan pembayaran setelah ongkir dikonfirmasi.
+                        </p>
+                      </div>
+                    )}
 
                     {delivery.alasanKeputusan && (
                       <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
@@ -641,7 +660,7 @@ function OrderStatusContent() {
                 )}
               </section>
 
-              {/* Kartu Informasi Pembayaran (Read-Only dari Backend) */}
+              {/* Kartu Informasi Pembayaran */}
               <section className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -663,40 +682,60 @@ function OrderStatusContent() {
 
                 {!payment ? (
                   <div className="rounded-2xl bg-[#f7f6f2] p-5 text-center space-y-3">
-                    <p className="text-xs text-slate-600">
-                      Belum ada data pembayaran di backend untuk pesanan ini.
-                      Klik tombol di bawah untuk memanggil{' '}
-                      <code className="font-mono font-bold">
-                        POST /api/payments
-                      </code>{' '}
-                      dan menghasilkan{' '}
-                      <code className="font-mono">gatewayRef</code>:
-                    </p>
-                    {simulatePayError && (
-                      <p className="text-xs text-red-600 font-medium">
-                        {simulatePayError}
+                    {isOngkirPendingAdmin ? (
+                      <p className="text-xs text-amber-800 font-medium">
+                        Ongkir sedang menunggu konfirmasi admin. Tombol pembayaran akan aktif setelah admin menetapkan ongkir.
                       </p>
+                    ) : isDeliveryCancelled ? (
+                      <p className="text-xs text-slate-500">
+                        Pengiriman dibatalkan. Pembayaran tidak dapat diproses.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-xs text-slate-600">
+                          Pesanan belum memiliki data pembayaran. Pilih metode pembayaran dan klik tombol di bawah untuk membayar subtotal barang + ongkir:
+                        </p>
+                        {simulatePayError && (
+                          <p className="text-xs text-red-600 font-medium">
+                            {simulatePayError}
+                          </p>
+                        )}
+                        <div className="flex justify-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPayMethod('QRIS')}
+                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer ${
+                              selectedPayMethod === 'QRIS'
+                                ? 'border-[#174634] bg-[#174634] text-white'
+                                : 'border-slate-200 bg-white text-slate-700'
+                            }`}
+                          >
+                            QRIS
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPayMethod('TRANSFER')}
+                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer ${
+                              selectedPayMethod === 'TRANSFER'
+                                ? 'border-[#174634] bg-[#174634] text-white'
+                                : 'border-slate-200 bg-white text-slate-700'
+                            }`}
+                          >
+                            TRANSFER
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isCreatingPay}
+                          onClick={() => handleCreatePayment(selectedPayMethod)}
+                          className="w-full mt-2 px-4 py-2.5 rounded-xl bg-[#174634] hover:bg-[#113527] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
+                        >
+                          {isCreatingPay
+                            ? 'Memproses Pembayaran...'
+                            : `Bayar Sekarang (${selectedPayMethod})`}
+                        </button>
+                      </>
                     )}
-                    <div className="flex flex-wrap justify-center gap-2">
-                      <button
-                        type="button"
-                        disabled={isCreatingPay}
-                        onClick={() => handleCreatePayment('QRIS')}
-                        className="px-4 py-2.5 rounded-xl bg-[#174634] hover:bg-[#113527] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
-                      >
-                        {isCreatingPay
-                          ? 'Memproses ke Backend...'
-                          : 'Buat Pembayaran QRIS'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isCreatingPay}
-                        onClick={() => handleCreatePayment('TRANSFER')}
-                        className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-xs font-semibold cursor-pointer"
-                      >
-                        Buat Pembayaran TRANSFER
-                      </button>
-                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3 text-xs">
@@ -712,7 +751,7 @@ function OrderStatusContent() {
 
                       <div className="p-3 rounded-2xl bg-[#f7f6f2]">
                         <span className="text-slate-400 block text-[10px]">
-                          Nominal Pembayaran Tercatat
+                          Nominal Tercatat (Payment.jumlah)
                         </span>
                         <span className="font-bold text-[#174634] text-sm">
                           {formatRupiah(payment.jumlah)}
@@ -720,9 +759,16 @@ function OrderStatusContent() {
                       </div>
                     </div>
 
+                    {/* Poin 5: Catatan jika pesanan lama dibayar sebelum ongkir online ditagihkan */}
+                    {payment.jumlah < totalTagihanAkhir && !isOngkirPendingAdmin && (
+                      <div className="rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-800">
+                        ⚠️ Pembayaran tercatat sebelum ongkir ditagihkan.
+                      </div>
+                    )}
+
                     <div className="p-3.5 rounded-2xl bg-[#f7f6f2]">
                       <span className="text-slate-400 block text-[10px]">
-                        Kode Referensi Gateway (gatewayRef dari Backend)
+                        Kode Referensi Gateway (gatewayRef)
                       </span>
                       <span className="font-mono font-bold text-slate-900 text-xs">
                         {payment.gatewayRef}
@@ -779,12 +825,12 @@ function OrderStatusContent() {
               </section>
             </div>
 
-            {/* Rincian Item & Perhitungan Total Akhir */}
+            {/* Rincian Item & Total Tagihan Akhir (Poin 4) */}
             <section className="bg-white rounded-3xl p-6 border border-slate-200">
               <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
                 <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <Package className="w-4 h-4 text-[#174634]" />
-                  <span>Rincian Item & Total Tagihan Akhir</span>
+                  <span>Rincian Item & Total Keseluruhan</span>
                 </h2>
                 <button
                   type="button"
@@ -844,17 +890,19 @@ function OrderStatusContent() {
                       </span>
                     </div>
                     <div className="flex justify-between text-slate-600">
-                      <span>Ongkos Kirim (Dari Data Pengiriman)</span>
+                      <span>Ongkir</span>
                       <span className="font-semibold text-[#174634]">
                         {!delivery
                           ? 'Belum ada pengiriman'
                           : isOngkirPendingAdmin
                             ? 'Menunggu konfirmasi admin'
-                            : formatRupiah(delivery.ongkir)}
+                            : delivery.ongkir === 0
+                              ? 'GRATIS'
+                              : formatRupiah(delivery.ongkir)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-sm font-bold text-slate-900 pt-2 border-t border-slate-100">
-                      <span>Total Tagihan Akhir (Barang + Ongkir)</span>
+                      <span>Total Keseluruhan (Payment.jumlah)</span>
                       <span className="text-[#174634]">
                         {isOngkirPendingAdmin
                           ? `${formatRupiah(subtotalBarang)} + Menunggu konfirmasi admin`
@@ -867,13 +915,13 @@ function OrderStatusContent() {
                 <div className="space-y-3">
                   {delivery && (
                     <div className="flex justify-between text-xs p-3 rounded-2xl bg-[#f7f6f2]">
-                      <span className="text-slate-600">
-                        Ongkos Kirim (Dari Data Pengiriman):
-                      </span>
+                      <span className="text-slate-600">Ongkir:</span>
                       <span className="font-bold text-[#174634]">
                         {isOngkirPendingAdmin
                           ? 'Menunggu konfirmasi admin'
-                          : formatRupiah(delivery.ongkir)}
+                          : delivery.ongkir === 0
+                            ? 'GRATIS'
+                            : formatRupiah(delivery.ongkir)}
                       </span>
                     </div>
                   )}
