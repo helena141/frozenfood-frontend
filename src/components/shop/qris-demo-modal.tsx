@@ -1,18 +1,35 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   QrCode,
-  Sparkles,
-  Copy,
-  Check,
+  ExternalLink,
   X,
   ShieldCheck,
   AlertCircle,
-  Building2,
+  Loader2,
+  CheckCircle2,
+  CreditCard,
 } from 'lucide-react';
 import { api } from '@/lib/axios';
 import { formatRupiah, getErrorMessage } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth-store';
+
+declare global {
+  interface Window {
+    snap?: {
+      pay: (
+        snapToken: string,
+        callbacks: {
+          onSuccess?: (result: Record<string, unknown>) => void;
+          onPending?: (result: Record<string, unknown>) => void;
+          onError?: (result: Record<string, unknown>) => void;
+          onClose?: () => void;
+        }
+      ) => void;
+    };
+  }
+}
 
 interface QrisDemoModalProps {
   isOpen: boolean;
@@ -33,35 +50,130 @@ export default function QrisDemoModal({
   idOrder,
   onSuccess,
 }: QrisDemoModalProps) {
-  const [isSimulating, setIsSimulating] = useState(false);
+  const user = useAuthStore((state) => state.user);
+  const [isSnapReady, setIsSnapReady] = useState(false);
+  const [isRequestingToken, setIsRequestingToken] = useState(false);
+  const [isSyncingBackend, setIsSyncingBackend] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [statusInfo, setStatusInfo] = useState<string | null>(null);
+
+  // Muat script resmi Midtrans Sandbox snap.js
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const clientKey =
+      process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY || '';
+
+    if (window.snap) {
+      setIsSnapReady(true);
+      return;
+    }
+
+    const existingScript = document.getElementById('midtrans-snap-script');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => setIsSnapReady(true));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'midtrans-snap-script';
+    script.src = 'https://app.sandbox.midtrans.com/snap/snap.js';
+    script.setAttribute('data-client-key', clientKey);
+    script.async = true;
+    script.onload = () => setIsSnapReady(true);
+    script.onerror = () =>
+      setErrorMsg('Gagal memuat script snap.js dari Midtrans Sandbox.');
+    document.body.appendChild(script);
+  }, []);
 
   if (!isOpen) return null;
 
-  const handleCopyRef = () => {
-    navigator.clipboard.writeText(gatewayRef);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleSimulateCallbackLunas = async () => {
+  // Sinkronkan status LUNAS ke backend Spring Boot ketika pembayaran Midtrans berhasil
+  const syncPaymentSuccessToBackend = async () => {
+    setIsSyncingBackend(true);
     setErrorMsg(null);
-    setIsSimulating(true);
     try {
       await api.post('/api/payments/callback', {
         gatewayRef,
         status: 'LUNAS',
         jumlahDikonfirmasi: jumlah,
       });
-      onSuccess();
-      onClose();
+      setStatusInfo(
+        'Pembayaran Midtrans berhasil! Status pesanan di backend telah diperbarui menjadi LUNAS.'
+      );
+      setTimeout(() => {
+        onSuccess();
+        onClose();
+      }, 1200);
     } catch (err) {
       setErrorMsg(
-        getErrorMessage(err, 'Gagal mengirim simulasi callback pembayaran.')
+        getErrorMessage(
+          err,
+          'Pembayaran di Midtrans berhasil, namun gagal mengirim callback ke backend.'
+        )
       );
     } finally {
-      setIsSimulating(false);
+      setIsSyncingBackend(false);
+    }
+  };
+
+  // Minta snapToken dari API Route lalu buka popup window.snap.pay()
+  const handleLaunchMidtransSnap = async () => {
+    setErrorMsg(null);
+    setStatusInfo(null);
+    setIsRequestingToken(true);
+
+    try {
+      const res = await fetch('/api/midtrans/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gatewayRef,
+          jumlah,
+          metodePay,
+          customerName: user?.nama || 'Pelanggan Lezzat',
+          customerEmail: user?.email || 'customer@lezzat.id',
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.token) {
+        throw new Error(
+          data.message || 'Gagal mendapatkan Snap Token dari Midtrans Sandbox.'
+        );
+      }
+
+      if (!window.snap) {
+        throw new Error(
+          'Script Midtrans Snap belum siap. Pastikan koneksi internet aktif dan Client Key valid.'
+        );
+      }
+
+      // Buka Popup Resmi Midtrans Snap
+      window.snap.pay(data.token, {
+        onSuccess: async () => {
+          await syncPaymentSuccessToBackend();
+        },
+        onPending: () => {
+          setStatusInfo(
+            'Menunggu pembayaran di Simulator Midtrans. Salin Nomor VA / URL QRIS dari popup Snap ke Simulator Midtrans.'
+          );
+        },
+        onError: () => {
+          setErrorMsg('Transaksi ditolak atau gagal di Midtrans Sandbox.');
+        },
+        onClose: () => {
+          // Ditutup oleh pengguna
+        },
+      });
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : 'Gagal membuka popup Midtrans Snap.'
+      );
+    } finally {
+      setIsRequestingToken(false);
     }
   };
 
@@ -69,22 +181,20 @@ export default function QrisDemoModal({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-4"
     >
       <div className="bg-white rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden">
-        <div className="bg-[#174634] text-white p-5 flex items-center justify-between">
+        <div className="bg-[#002855] text-white p-5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
-              <QrCode className="w-5 h-5 text-emerald-200" />
+              <CreditCard className="w-5 h-5 text-sky-200" />
             </div>
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-200 block">
-                SIMULASI PAYMENT GATEWAY
+              <span className="text-[10px] font-bold uppercase tracking-widest text-sky-200 block">
+                MIDTRANS SNAP SANDBOX ASLI
               </span>
               <h3 className="text-base font-bold leading-tight">
-                {metodePay === 'TRANSFER'
-                  ? 'Virtual Account Bank (Demo)'
-                  : 'QRIS Standar Nasional (Demo)'}
+                Pembayaran QRIS & Virtual Account
               </h3>
             </div>
           </div>
@@ -97,11 +207,11 @@ export default function QrisDemoModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-5 text-xs">
+        <div className="p-6 space-y-4 text-xs">
           <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#f7f6f2] border border-slate-200/80">
             <div>
               <span className="text-[10px] text-slate-400 block">
-                Total Tagihan (Barang + Ongkir)
+                Nominal Tagihan ({metodePay})
               </span>
               <span className="text-lg font-extrabold text-[#174634]">
                 {formatRupiah(jumlah)}
@@ -109,106 +219,41 @@ export default function QrisDemoModal({
             </div>
             <div className="text-right">
               <span className="text-[10px] text-slate-400 block">
-                Merchant
-              </span>
-              <span className="font-bold text-slate-800">
-                LEZZAT FROZEN FOOD
-              </span>
-            </div>
-          </div>
-
-          {metodePay === 'TRANSFER' ? (
-            <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-5 text-center space-y-2">
-              <Building2 className="w-8 h-8 text-[#174634] mx-auto" />
-              <p className="text-slate-500 text-[11px]">
-                Nomor Virtual Account Pembayaran
-              </p>
-              <p className="font-mono text-base font-extrabold text-slate-900 tracking-wider">
-                8801 0812 3456 7890
-              </p>
-              <p className="text-[11px] text-emerald-700 font-medium">
-                Otomatis terverifikasi melalui simulasi webhook di bawah
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-inner">
-              <div className="flex items-center justify-between w-full mb-3 px-2">
-                <span className="font-extrabold text-xs tracking-tight text-slate-900">
-                  QRIS
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-600 text-white">
-                  GPN
-                </span>
-              </div>
-
-              <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-xs">
-                <svg
-                  viewBox="0 0 120 120"
-                  className="w-44 h-44 text-slate-900"
-                  fill="currentColor"
-                >
-                  <path d="M10 10h30v30H10zM15 15v20h20V15z" />
-                  <rect x="20" y="20" width="10" height="10" />
-                  <path d="M80 10h30v30H80zM85 15v20h20V15z" />
-                  <rect x="90" y="20" width="10" height="10" />
-                  <path d="M10 80h30v30H10zM15 85v20h20V85z" />
-                  <rect x="20" y="90" width="10" height="10" />
-                  <rect x="45" y="10" width="5" height="10" />
-                  <rect x="55" y="15" width="10" height="5" />
-                  <rect x="70" y="10" width="5" height="15" />
-                  <rect x="45" y="25" width="15" height="5" />
-                  <rect x="65" y="30" width="10" height="10" />
-                  <rect x="10" y="45" width="15" height="5" />
-                  <rect x="30" y="45" width="10" height="10" />
-                  <rect x="45" y="45" width="30" height="5" />
-                  <rect x="85" y="45" width="10" height="10" />
-                  <rect x="100" y="45" width="10" height="5" />
-                  <rect x="15" y="55" width="10" height="15" />
-                  <rect x="35" y="60" width="15" height="5" />
-                  <rect x="55" y="55" width="10" height="10" />
-                  <rect x="70" y="60" width="15" height="10" />
-                  <rect x="95" y="55" width="15" height="15" />
-                  <rect x="45" y="75" width="10" height="15" />
-                  <rect x="60" y="80" width="15" height="5" />
-                  <rect x="80" y="75" width="10" height="10" />
-                  <rect x="45" y="95" width="20" height="15" />
-                  <rect x="70" y="90" width="10" height="20" />
-                  <rect x="85" y="95" width="25" height="15" />
-                </svg>
-              </div>
-
-              <p className="text-[11px] text-slate-500 mt-3 text-center">
-                NMID: ID1026000{idOrder.slice(0, 6).toUpperCase()}
-              </p>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between rounded-xl bg-slate-100 px-3.5 py-2.5">
-            <div>
-              <span className="text-[10px] text-slate-400 block">
-                Kode Referensi Gateway (gatewayRef)
+                Gateway Ref Backend
               </span>
               <span className="font-mono font-bold text-slate-800">
                 {gatewayRef}
               </span>
             </div>
-            <button
-              type="button"
-              onClick={handleCopyRef}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold hover:bg-slate-50 cursor-pointer"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Disalin</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Salin</span>
-                </>
-              )}
-            </button>
+          </div>
+
+          <div className="rounded-2xl bg-sky-50 border border-sky-200 p-4 space-y-2 text-slate-700 leading-relaxed">
+            <p className="font-bold text-slate-900">
+              Cara Uji Pembayaran di Midtrans Sandbox:
+            </p>
+            <ol className="list-decimal list-inside space-y-1 text-[11px]">
+              <li>
+                Klik tombol <strong>Buka Popup Midtrans Snap</strong> di bawah.
+              </li>
+              <li>
+                Pilih <strong>QRIS (GoPay/ShopeePay)</strong> atau{' '}
+                <strong>Bank Transfer (BCA/BNI/BRI/Mandiri VA)</strong>, lalu
+                salin Nomor VA atau kode QR-nya.
+              </li>
+              <li>
+                Buka{' '}
+                <a
+                  href="https://simulator.sandbox.midtrans.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold text-blue-700 underline inline-flex items-center gap-0.5"
+                >
+                  Simulator Midtrans Sandbox
+                  <ExternalLink className="w-3 h-3" />
+                </a>{' '}
+                untuk menyelesaikan pembayaran.
+              </li>
+            </ol>
           </div>
 
           {errorMsg && (
@@ -218,27 +263,58 @@ export default function QrisDemoModal({
             </div>
           )}
 
-          <div className="pt-1 space-y-2">
+          {statusInfo && (
+            <div className="flex items-start gap-2 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-[#174634] font-medium">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{statusInfo}</span>
+            </div>
+          )}
+
+          <div className="space-y-2.5 pt-1">
             <button
               type="button"
-              disabled={isSimulating}
-              onClick={handleSimulateCallbackLunas}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-bold py-3.5 px-5 text-xs shadow-sm transition-colors cursor-pointer"
+              disabled={isRequestingToken || isSyncingBackend || !isSnapReady}
+              onClick={handleLaunchMidtransSnap}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#002855] hover:bg-[#001d3d] disabled:opacity-60 text-white font-bold py-3.5 px-5 text-xs shadow-sm transition-colors cursor-pointer"
             >
-              <Sparkles className="w-4 h-4" />
-              <span>
-                {isSimulating
-                  ? 'Memproses Callback Lunas ke Backend...'
-                  : `Simulasikan Scan & Bayar Lunas (${formatRupiah(jumlah)})`}
-              </span>
+              {isRequestingToken ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Meminta Snap Token ke Midtrans...</span>
+                </>
+              ) : (
+                <>
+                  <QrCode className="w-4 h-4" />
+                  <span>Buka Popup Midtrans Snap (QRIS & Transfer VA)</span>
+                </>
+              )}
             </button>
 
-            <p className="text-[11px] text-slate-400 text-center flex items-center justify-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>
-                Menembak <code>POST /api/payments/callback</code> (status: LUNAS)
-              </span>
-            </p>
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <a
+                href="https://simulator.sandbox.midtrans.com"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:underline"
+              >
+                <span>Buka Web Simulator Midtrans</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+
+              <button
+                type="button"
+                disabled={isSyncingBackend}
+                onClick={syncPaymentSuccessToBackend}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-[#174634] hover:underline cursor-pointer"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>
+                  {isSyncingBackend
+                    ? 'Menyinkronkan...'
+                    : 'Sudah Bayar di Simulator? Konfirmasi Lunas'}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
