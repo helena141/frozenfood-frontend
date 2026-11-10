@@ -21,6 +21,7 @@ import {
   Package,
   Info,
   Sparkles,
+  QrCode,
 } from 'lucide-react';
 import { api } from '@/lib/axios';
 import {
@@ -35,8 +36,7 @@ import {
   OrderResponse,
 } from '@/types/api';
 import ShopSidebar from '@/components/shop/sidebar';
-
-const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+import QrisDemoModal from '@/components/shop/qris-demo-modal';
 
 const PROGRESS_STEPS = [
   {
@@ -72,7 +72,6 @@ const ALL_KNOWN_STATUSES = [
   'DIBATALKAN',
 ];
 
-// Helper untuk mengambil elemen pertama dari respons GET /api/payments/order/{idOrder} yang berupa Array
 function parseValidPayment(raw: unknown): PaymentResponse | null {
   if (!raw) return null;
   const item = Array.isArray(raw) ? raw[0] : raw;
@@ -97,13 +96,13 @@ function parseValidPayment(raw: unknown): PaymentResponse | null {
     idPayment,
     idOrder: String(target.idOrder || ''),
     gatewayRef,
-    metodePay: String(target.metodePay || '-'),
+    metodePay: String(target.metodePay || 'QRIS'),
     jumlah: typeof target.jumlah === 'number' ? target.jumlah : 0,
     status: String(target.status || 'PENDING'),
     paidAt: typeof target.paidAt === 'string' ? target.paidAt : null,
     expiredAt: typeof target.expiredAt === 'string' ? target.expiredAt : null,
     createdAt: String(target.createdAt || ''),
-    updatedAt: String(target.updatedAt || ''),
+    updatedAt: String(target.createdAt || ''),
   };
 }
 
@@ -134,13 +133,15 @@ function OrderStatusContent() {
   const [cachedPayment, setCachedPayment] = useState<PaymentResponse | null>(
     null
   );
-  const [selectedPayMethod, setSelectedPayMethod] = useState<'QRIS' | 'TRANSFER'>('QRIS');
+  const [selectedPayMethod, setSelectedPayMethod] = useState<
+    'QRIS' | 'TRANSFER'
+  >('QRIS');
   const [isDownloadingNota, setIsDownloadingNota] = useState(false);
   const [notaError, setNotaError] = useState<string | null>(null);
 
-  const [isSimulatingPay, setIsSimulatingPay] = useState(false);
   const [simulatePayError, setSimulatePayError] = useState<string | null>(null);
   const [isCreatingPay, setIsCreatingPay] = useState(false);
+  const [isQrisModalOpen, setIsQrisModalOpen] = useState(false);
 
   useEffect(() => {
     const now = new Date();
@@ -150,7 +151,9 @@ function OrderStatusContent() {
     setTodayYmd(`${yyyy}-${mm}-${dd}`);
 
     if (typeof window !== 'undefined' && idOrder) {
-      const raw = sessionStorage.getItem(`lezzat-order-${idOrder}`);
+      const raw =
+        sessionStorage.getItem(`lezzat-order-${idOrder}`) ||
+        localStorage.getItem(`lezzat-order-${idOrder}`);
       if (raw) {
         try {
           const parsed = JSON.parse(raw) as {
@@ -170,28 +173,21 @@ function OrderStatusContent() {
     }
   }, [idOrder]);
 
-  // 0. Fetch Detail Order beserta Items dari Backend (GET /api/orders/{idOrder})
-  const {
-    data: orderData,
-    refetch: refetchOrder,
-  } = useQuery<OrderResponse | null>({
-    queryKey: ['order-detail', idOrder],
-    queryFn: async () => {
-      try {
-        const res = await api.get<OrderResponse>(`/api/orders/${idOrder}`);
-        return res.data;
-      } catch (err) {
-        if (axios.isAxiosError(err) && err.response?.status === 404) {
+  const { data: orderData, refetch: refetchOrder } =
+    useQuery<OrderResponse | null>({
+      queryKey: ['order-detail', idOrder],
+      queryFn: async () => {
+        try {
+          const res = await api.get<OrderResponse>(`/api/orders/${idOrder}`);
+          return res.data;
+        } catch {
           return null;
         }
-        return null;
-      }
-    },
-    enabled: Boolean(idOrder),
-    retry: false,
-  });
+      },
+      enabled: Boolean(idOrder),
+      retry: false,
+    });
 
-  // 1. Fetch Pengiriman (404 = kosong)
   const {
     data: deliveryData,
     isLoading: isLoadingDelivery,
@@ -215,7 +211,6 @@ function OrderStatusContent() {
     retry: false,
   });
 
-  // 2. Fetch Pembayaran dari Backend: Mengembalikan ARRAY (200 dengan [] jika belum ada pembayaran)
   const {
     data: paymentData,
     isLoading: isLoadingPayment,
@@ -251,7 +246,6 @@ function OrderStatusContent() {
     refetchPayment();
   };
 
-  // Membuat pembayaran (POST /api/payments)
   const handleCreatePayment = async (metodePay: 'QRIS' | 'TRANSFER') => {
     if (!idOrder) return;
     setSimulatePayError(null);
@@ -266,6 +260,7 @@ function OrderStatusContent() {
         setCachedPayment(created);
       }
       await refetchPayment();
+      setIsQrisModalOpen(true);
     } catch (error) {
       setSimulatePayError(
         getErrorMessage(error, 'Gagal membuat pembayaran ke backend.')
@@ -275,7 +270,6 @@ function OrderStatusContent() {
     }
   };
 
-  // 3. Unduh Nota PDF via Blob
   const handleDownloadNota = async () => {
     if (!idOrder) return;
     setNotaError(null);
@@ -307,35 +301,6 @@ function OrderStatusContent() {
     }
   };
 
-  // 4. Mode Demo: Simulasikan Pembayaran Lunas
-  const handleSimulatePaymentSuccess = async () => {
-    if (!payment || !payment.gatewayRef) {
-      setSimulatePayError(
-        'Data gatewayRef dari backend belum ada. Silakan buat pembayaran terlebih dahulu.'
-      );
-      return;
-    }
-
-    setSimulatePayError(null);
-    setIsSimulatingPay(true);
-
-    try {
-      await api.post('/api/payments/callback', {
-        gatewayRef: payment.gatewayRef,
-        status: 'LUNAS',
-        jumlahDikonfirmasi: payment.jumlah,
-      });
-      await refetchPayment();
-      await refetchDelivery();
-    } catch (error) {
-      setSimulatePayError(
-        getErrorMessage(error, 'Gagal menyimulasikan pembayaran lunas.')
-      );
-    } finally {
-      setIsSimulatingPay(false);
-    }
-  };
-
   const isLoading = isLoadingDelivery || isLoadingPayment;
   const currentStatus = delivery?.statusDelivery || '';
   const currentStepIndex = PROGRESS_STEPS.findIndex(
@@ -346,7 +311,7 @@ function OrderStatusContent() {
   const isUnknownStatus =
     Boolean(currentStatus) && !ALL_KNOWN_STATUSES.includes(currentStatus);
 
-  const subtotalBarang = activeOrder
+  const subtotalBarang = activeOrder?.items?.length
     ? activeOrder.items.reduce((sum, item) => sum + item.subtotalItem, 0)
     : 0;
 
@@ -385,7 +350,7 @@ function OrderStatusContent() {
             className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-[#174634]"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Kembali ke Pencarian Pesanan</span>
+            <span>Kembali ke Riwayat Pesanan</span>
           </Link>
 
           <div className="flex items-center gap-2.5">
@@ -466,7 +431,6 @@ function OrderStatusContent() {
 
         {!isLoading && !isErrorDelivery && !isErrorPayment && (
           <div className="space-y-6">
-            {/* Stepper Status Pengiriman */}
             <section className="bg-white rounded-3xl p-6 border border-slate-200">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-4 mb-6 border-b border-slate-100">
                 <div className="flex items-center gap-2.5">
@@ -573,7 +537,6 @@ function OrderStatusContent() {
               )}
             </section>
 
-            {/* Grid 2 Kolom: Pengiriman & Pembayaran */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <section className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -657,38 +620,15 @@ function OrderStatusContent() {
                         </span>
                       </div>
                     </div>
-
-                    {isOngkirPendingAdmin && (
-                      <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900">
-                        <p className="font-semibold mb-0.5">
-                          Menunggu konfirmasi ongkir dari admin.
-                        </p>
-                        <p className="text-[11px] text-amber-800">
-                          Anda dapat melakukan pembayaran setelah ongkir dikonfirmasi.
-                        </p>
-                      </div>
-                    )}
-
-                    {delivery.alasanKeputusan && (
-                      <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
-                        <span className="text-slate-400 block text-[10px] mb-1">
-                          Alasan Keputusan Sistem
-                        </span>
-                        <p className="text-slate-700 leading-relaxed">
-                          {delivery.alasanKeputusan}
-                        </p>
-                      </div>
-                    )}
                   </div>
                 )}
               </section>
 
-              {/* Kartu Informasi Pembayaran */}
               <section className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                     <CreditCard className="w-4 h-4 text-[#174634]" />
-                    <span>Informasi Pembayaran</span>
+                    <span>Informasi Pembayaran & Demo QRIS</span>
                   </h2>
                   {payment && (
                     <span
@@ -707,7 +647,9 @@ function OrderStatusContent() {
                   <div className="rounded-2xl bg-[#f7f6f2] p-5 text-center space-y-3">
                     {isOngkirPendingAdmin ? (
                       <p className="text-xs text-amber-800 font-medium">
-                        Ongkir sedang menunggu konfirmasi admin. Tombol pembayaran akan aktif setelah admin menetapkan ongkir.
+                        Ongkir sedang menunggu konfirmasi admin. Tombol
+                        pembayaran QRIS akan aktif setelah admin menetapkan
+                        ongkir.
                       </p>
                     ) : isDeliveryCancelled ? (
                       <p className="text-xs text-slate-500">
@@ -716,7 +658,8 @@ function OrderStatusContent() {
                     ) : (
                       <>
                         <p className="text-xs text-slate-600">
-                          Pesanan belum memiliki data pembayaran. Pilih metode pembayaran dan klik tombol di bawah untuk membayar subtotal barang + ongkir:
+                          Pilih metode pembayaran untuk memunculkan kode QRIS /
+                          Virtual Account:
                         </p>
                         {simulatePayError && (
                           <p className="text-xs text-red-600 font-medium">
@@ -727,35 +670,38 @@ function OrderStatusContent() {
                           <button
                             type="button"
                             onClick={() => setSelectedPayMethod('QRIS')}
-                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer ${
+                            className={`px-3.5 py-2 rounded-xl border text-xs font-bold cursor-pointer ${
                               selectedPayMethod === 'QRIS'
                                 ? 'border-[#174634] bg-[#174634] text-white'
                                 : 'border-slate-200 bg-white text-slate-700'
                             }`}
                           >
-                            QRIS
+                            QRIS (Scan QR)
                           </button>
                           <button
                             type="button"
                             onClick={() => setSelectedPayMethod('TRANSFER')}
-                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer ${
+                            className={`px-3.5 py-2 rounded-xl border text-xs font-bold cursor-pointer ${
                               selectedPayMethod === 'TRANSFER'
                                 ? 'border-[#174634] bg-[#174634] text-white'
                                 : 'border-slate-200 bg-white text-slate-700'
                             }`}
                           >
-                            TRANSFER
+                            TRANSFER VA
                           </button>
                         </div>
                         <button
                           type="button"
                           disabled={isCreatingPay}
                           onClick={() => handleCreatePayment(selectedPayMethod)}
-                          className="w-full mt-2 px-4 py-2.5 rounded-xl bg-[#174634] hover:bg-[#113527] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
+                          className="w-full mt-2 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#174634] hover:bg-[#113527] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
                         >
-                          {isCreatingPay
-                            ? 'Memproses Pembayaran...'
-                            : `Bayar Sekarang (${selectedPayMethod})`}
+                          <QrCode className="w-4 h-4" />
+                          <span>
+                            {isCreatingPay
+                              ? 'Membuat Tagihan QRIS...'
+                              : `Buat Tagihan & Buka Demo ${selectedPayMethod}`}
+                          </span>
                         </button>
                       </>
                     )}
@@ -774,20 +720,13 @@ function OrderStatusContent() {
 
                       <div className="p-3 rounded-2xl bg-[#f7f6f2]">
                         <span className="text-slate-400 block text-[10px]">
-                          Nominal Tercatat (Payment.jumlah)
+                          Total Tagihan (Payment.jumlah)
                         </span>
                         <span className="font-bold text-[#174634] text-sm">
                           {formatRupiah(payment.jumlah)}
                         </span>
                       </div>
                     </div>
-
-                    {/* Poin 5: Catatan jika pesanan lama dibayar sebelum ongkir online ditagihkan */}
-                    {payment.jumlah < totalTagihanAkhir && !isOngkirPendingAdmin && (
-                      <div className="rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-800">
-                        ⚠️ Pembayaran tercatat sebelum ongkir ditagihkan.
-                      </div>
-                    )}
 
                     <div className="p-3.5 rounded-2xl bg-[#f7f6f2]">
                       <span className="text-slate-400 block text-[10px]">
@@ -806,7 +745,7 @@ function OrderStatusContent() {
                         <span className="font-medium text-slate-800">
                           {payment.paidAt
                             ? formatWaktuSingkat(payment.paidAt)
-                            : 'Belum dibayar'}
+                            : 'Menunggu Pembayaran'}
                         </span>
                       </div>
                       <div>
@@ -821,24 +760,17 @@ function OrderStatusContent() {
                       </div>
                     </div>
 
-                    {isDemoMode && !isPaymentSettled && (
+                    {!isPaymentSettled && (
                       <div className="pt-3 border-t border-slate-100 space-y-2">
-                        {simulatePayError && (
-                          <p className="text-xs text-red-600">
-                            {simulatePayError}
-                          </p>
-                        )}
                         <button
                           type="button"
-                          onClick={handleSimulatePaymentSuccess}
-                          disabled={isSimulatingPay}
-                          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-semibold py-2.5 px-4 text-xs transition-colors cursor-pointer"
+                          onClick={() => setIsQrisModalOpen(true)}
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-4 text-xs shadow-sm transition-colors cursor-pointer"
                         >
+                          <QrCode className="w-4 h-4" />
                           <Sparkles className="w-3.5 h-3.5" />
                           <span>
-                            {isSimulatingPay
-                              ? 'Menyimulasikan Callback...'
-                              : 'Simulasikan pembayaran berhasil (Mode Demo)'}
+                            Buka QRIS & Simulasikan Pembayaran Lunas (Demo)
                           </span>
                         </button>
                       </div>
@@ -848,7 +780,6 @@ function OrderStatusContent() {
               </section>
             </div>
 
-            {/* Rincian Item & Total Tagihan Akhir (Poin 4) */}
             <section className="bg-white rounded-3xl p-6 border border-slate-200">
               <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
                 <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -925,42 +856,40 @@ function OrderStatusContent() {
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-sm font-bold text-slate-900 pt-2 border-t border-slate-100">
-                      <span>Total Keseluruhan (Payment.jumlah)</span>
+                      <span>Total Keseluruhan</span>
                       <span className="text-[#174634]">
                         {isOngkirPendingAdmin
                           ? `${formatRupiah(subtotalBarang)} + Menunggu konfirmasi admin`
-                          : formatRupiah(totalTagihanAkhir)}
+                          : formatRupiah(
+                              payment?.jumlah || totalTagihanAkhir
+                            )}
                       </span>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {delivery && (
-                    <div className="flex justify-between text-xs p-3 rounded-2xl bg-[#f7f6f2]">
-                      <span className="text-slate-600">Ongkir:</span>
-                      <span className="font-bold text-[#174634]">
-                        {isOngkirPendingAdmin
-                          ? 'Menunggu konfirmasi admin'
-                          : delivery.ongkir === 0
-                            ? 'GRATIS'
-                            : formatRupiah(delivery.ongkir)}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-start gap-2.5 rounded-2xl bg-[#f7f6f2] p-4 text-xs text-slate-600">
-                    <Info className="w-4 h-4 text-[#174634] shrink-0 mt-0.5" />
-                    <span>
-                      Rincian item barang tersimpan pada sesi perangkat saat
-                      checkout. Untuk melihat rincian nota lengkap pada
-                      perangkat/sesi lain, klik tombol{' '}
-                      <strong>Unduh Nota PDF</strong> di atas.
-                    </span>
-                  </div>
+                <div className="flex items-start gap-2.5 rounded-2xl bg-[#f7f6f2] p-4 text-xs text-slate-600">
+                  <Info className="w-4 h-4 text-[#174634] shrink-0 mt-0.5" />
+                  <span>
+                    Klik tombol <strong>Unduh Nota PDF</strong> di atas untuk
+                    melihat rincian item pesanan resmi.
+                  </span>
                 </div>
               )}
             </section>
           </div>
+        )}
+
+        {payment && (
+          <QrisDemoModal
+            isOpen={isQrisModalOpen}
+            onClose={() => setIsQrisModalOpen(false)}
+            gatewayRef={payment.gatewayRef}
+            jumlah={payment.jumlah}
+            metodePay={payment.metodePay}
+            idOrder={idOrder}
+            onSuccess={handleRefreshAll}
+          />
         )}
       </main>
     </div>
