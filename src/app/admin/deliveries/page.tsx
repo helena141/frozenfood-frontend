@@ -183,11 +183,27 @@ export default function AdminDeliveriesPage() {
       const params: Record<string, string | number> = { page, size };
       if (selectedStatus) {
         params.status = selectedStatus;
+        params.statusDelivery = selectedStatus;
       }
-      const res = await api.get<DeliveryListResponse>('/api/deliveries', {
-        params,
-      });
-      return res.data;
+      const res = await api.get<DeliveryListResponse | DeliveryResponse[]>(
+        '/api/deliveries',
+        { params }
+      );
+      const raw = res.data;
+      if (Array.isArray(raw)) {
+        const filtered = selectedStatus
+          ? raw.filter((d) => d.statusDelivery === selectedStatus)
+          : raw;
+        const start = page * size;
+        return {
+          content: filtered.slice(start, start + size),
+          page,
+          size,
+          totalElements: filtered.length,
+          totalPages: Math.max(1, Math.ceil(filtered.length / size)),
+        };
+      }
+      return raw;
     },
   });
 
