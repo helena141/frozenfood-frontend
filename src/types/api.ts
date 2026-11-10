@@ -49,6 +49,14 @@ export interface ProductBatchRequest {
   diskon?: number | null;
 }
 
+export interface ProductBatchUpdateRequest {
+  stokAwal?: number;
+  stokOnline?: number;
+  tanggalExp?: string;
+  hargaOverride?: number | null;
+  diskon?: number | null;
+}
+
 export interface ProductBatchResponse {
   idProdBatch: string;
   productId: string;

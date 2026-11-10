@@ -27,6 +27,7 @@ import {
   ProductCatalogResponse,
   ProductUpsertRequest,
   ProductBatchRequest,
+  ProductBatchUpdateRequest,
   ProductBatchResponse,
 } from '@/types/api';
 import AdminSidebar from '@/components/admin/admin-sidebar';
@@ -55,7 +56,11 @@ const batchFormSchema = z.object({
   productId: z.string().min(1, 'Produk wajib dipilih'),
   stokAwal: z.coerce
     .number({ invalid_type_error: 'Stok awal harus berupa angka' })
-    .min(1, 'Stok awal minimal 1 unit'),
+    .min(0, 'Stok awal minimal 0 unit'),
+  stokOnline: z.coerce
+    .number({ invalid_type_error: 'Stok online harus berupa angka' })
+    .min(0, 'Stok online minimal 0 unit')
+    .optional(),
   tanggalExp: z.string().min(1, 'Tanggal kedaluwarsa wajib diisi'),
   hargaOverride: z.string().optional(),
   diskon: z.string().optional(),
@@ -80,6 +85,11 @@ export default function AdminProductsPage() {
 
   // State Manajemen Batch FEFO
   const [isBatchFormOpen, setIsBatchFormOpen] = useState<boolean>(false);
+  const [editingBatch, setEditingBatch] =
+    useState<ProductBatchResponse | null>(null);
+  const [deleteBatchTarget, setDeleteBatchTarget] =
+    useState<ProductBatchResponse | null>(null);
+  const [isDeletingBatch, setIsDeletingBatch] = useState<boolean>(false);
   const [selectedBatchFilterProduct, setSelectedBatchFilterProduct] =
     useState<string>('');
 
@@ -212,14 +222,43 @@ export default function AdminProductsPage() {
     setActionError(null);
     setActionSuccess(null);
     setIsFormOpen(false);
+    setEditingBatch(null);
     resetBatch({
       productId: preselectedProductId || products[0]?.idProduk || '',
       stokAwal: 50,
-      tanggalExp: "",
+      stokOnline: 50,
+      tanggalExp: '',
       hargaOverride: '',
       diskon: '',
     });
     setIsBatchFormOpen(true);
+  };
+
+  const handleOpenEditBatch = (batch: ProductBatchResponse) => {
+    setActionError(null);
+    setActionSuccess(null);
+    setIsFormOpen(false);
+    setEditingBatch(batch);
+    resetBatch({
+      productId: batch.productId,
+      stokAwal: batch.stokAwal,
+      stokOnline: batch.stokOnline,
+      tanggalExp: batch.tanggalExp,
+      hargaOverride:
+        batch.hargaOverride !== null && batch.hargaOverride !== undefined
+          ? String(batch.hargaOverride)
+          : '',
+      diskon:
+        batch.diskon !== null && batch.diskon !== undefined
+          ? String(batch.diskon)
+          : '',
+    });
+    setIsBatchFormOpen(true);
+  };
+
+  const handleCloseBatchForm = () => {
+    setIsBatchFormOpen(false);
+    setEditingBatch(null);
   };
 
   // Submit Create (POST /api/products) atau Update (PUT /api/products/{id})
@@ -263,7 +302,7 @@ export default function AdminProductsPage() {
     }
   };
 
-  // Submit Tambah Batch FEFO (POST /api/inventory/batches)
+  // Submit Tambah (POST /api/inventory/batches) atau Edit Batch FEFO (PUT /api/inventory/batches/{id})
   const onSubmitBatchForm = async (values: BatchFormValues) => {
     setActionError(null);
     setActionSuccess(null);
@@ -277,37 +316,96 @@ export default function AdminProductsPage() {
         ? Number(values.diskon)
         : null;
 
-    const payload: ProductBatchRequest = {
-      productId: values.productId,
-      stokAwal: Number(values.stokAwal),
-      tanggalExp: values.tanggalExp,
-      hargaOverride:
-        parsedOverride !== null && !Number.isNaN(parsedOverride)
-          ? parsedOverride
-          : null,
-      diskon:
-        parsedDiskon !== null && !Number.isNaN(parsedDiskon)
-          ? parsedDiskon
-          : null,
-    };
-
     try {
-      const res = await api.post<ProductBatchResponse>(
-        '/api/inventory/batches',
-        payload
-      );
-      setActionSuccess(
-        `Batch FEFO "${res.data.idProdBatch}" (${res.data.stokAwal} unit) untuk "${res.data.namaProduk}" berhasil ditambahkan.`
-      );
+      if (editingBatch) {
+        const updatePayload: ProductBatchUpdateRequest = {
+          stokAwal: Number(values.stokAwal),
+          stokOnline:
+            values.stokOnline !== undefined &&
+            !Number.isNaN(Number(values.stokOnline))
+              ? Number(values.stokOnline)
+              : Number(values.stokAwal),
+          tanggalExp: values.tanggalExp,
+          hargaOverride:
+            parsedOverride !== null && !Number.isNaN(parsedOverride)
+              ? parsedOverride
+              : null,
+          diskon:
+            parsedDiskon !== null && !Number.isNaN(parsedDiskon)
+              ? parsedDiskon
+              : null,
+        };
+        const res = await api.put<ProductBatchResponse>(
+          `/api/inventory/batches/${editingBatch.idProdBatch}`,
+          updatePayload
+        );
+        setActionSuccess(
+          `Batch FEFO "${res.data.idProdBatch}" untuk "${res.data.namaProduk}" berhasil diperbarui.`
+        );
+      } else {
+        if (Number(values.stokAwal) < 1) {
+          setActionError('Stok awal batch baru minimal 1 unit.');
+          return;
+        }
+        const payload: ProductBatchRequest = {
+          productId: values.productId,
+          stokAwal: Number(values.stokAwal),
+          tanggalExp: values.tanggalExp,
+          hargaOverride:
+            parsedOverride !== null && !Number.isNaN(parsedOverride)
+              ? parsedOverride
+              : null,
+          diskon:
+            parsedDiskon !== null && !Number.isNaN(parsedDiskon)
+              ? parsedDiskon
+              : null,
+        };
+        const res = await api.post<ProductBatchResponse>(
+          '/api/inventory/batches',
+          payload
+        );
+        setActionSuccess(
+          `Batch FEFO "${res.data.idProdBatch}" (${res.data.stokAwal} unit) untuk "${res.data.namaProduk}" berhasil ditambahkan.`
+        );
+      }
       setIsBatchFormOpen(false);
+      setEditingBatch(null);
       await Promise.all([refetch(), refetchBatches()]);
     } catch (err) {
       setActionError(
         getErrorMessage(
           err,
-          'Gagal menambahkan batch stok FEFO. Pastikan tanggal kedaluwarsa berada di masa depan.'
+          editingBatch
+            ? 'Gagal memperbarui data batch FEFO.'
+            : 'Gagal menambahkan batch stok FEFO. Pastikan tanggal kedaluwarsa berada di masa depan.'
         )
       );
+    }
+  };
+
+  // Konfirmasi & Eksekusi Delete Batch (DELETE /api/inventory/batches/{id})
+  const handleConfirmDeleteBatch = async () => {
+    if (!deleteBatchTarget) return;
+    setActionError(null);
+    setActionSuccess(null);
+    setIsDeletingBatch(true);
+
+    try {
+      await api.delete(
+        `/api/inventory/batches/${deleteBatchTarget.idProdBatch}`
+      );
+      setActionSuccess(
+        `Batch "${deleteBatchTarget.idProdBatch}" (${deleteBatchTarget.namaProduk}) berhasil dihapus.`
+      );
+      setDeleteBatchTarget(null);
+      await Promise.all([refetch(), refetchBatches()]);
+    } catch (err) {
+      setActionError(
+        getErrorMessage(err, 'Gagal menghapus batch stok FEFO.')
+      );
+      setDeleteBatchTarget(null);
+    } finally {
+      setIsDeletingBatch(false);
     }
   };
 
@@ -437,22 +535,38 @@ export default function AdminProductsPage() {
           </div>
         )}
 
-        {/* Panel Form Tambah Stok Batch FEFO */}
+        {/* Panel Form Tambah / Edit Stok Batch FEFO */}
         {isBatchFormOpen && (
           <section className="mb-6 bg-white rounded-3xl p-6 border-2 border-amber-600 shadow-sm">
             <div className="flex items-center justify-between pb-4 mb-5 border-b border-slate-100">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
-                  Tambah Stok Batch FEFO Baru
+                  {editingBatch
+                    ? `Edit Batch FEFO: ${editingBatch.idProdBatch}`
+                    : 'Tambah Stok Batch FEFO Baru'}
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Stok online produk dihitung otomatis dari akumulasi batch aktif
-                  yang belum kedaluwarsa (<code>POST /api/inventory/batches</code>)
+                  {editingBatch ? (
+                    <>
+                      Perbarui stok fisik awal, sisa stok online, tanggal
+                      kedaluwarsa, harga override, atau diskon batch (
+                      <code>
+                        PUT /api/inventory/batches/{editingBatch.idProdBatch}
+                      </code>
+                      )
+                    </>
+                  ) : (
+                    <>
+                      Stok online produk dihitung otomatis dari akumulasi batch
+                      aktif yang belum kedaluwarsa (
+                      <code>POST /api/inventory/batches</code>)
+                    </>
+                  )}
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setIsBatchFormOpen(false)}
+                onClick={handleCloseBatchForm}
                 className="text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -464,14 +578,19 @@ export default function AdminProductsPage() {
               noValidate
               className="space-y-4"
             >
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div
+                className={`grid grid-cols-1 ${
+                  editingBatch ? 'sm:grid-cols-4' : 'sm:grid-cols-3'
+                } gap-4`}
+              >
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1.5">
                     Pilih Produk *
                   </label>
                   <select
                     {...registerBatch('productId')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 bg-white focus:border-[#174634] focus:outline-none"
+                    disabled={Boolean(editingBatch)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 bg-white disabled:bg-slate-100 disabled:text-slate-500 focus:border-[#174634] focus:outline-none"
                   >
                     <option value="">-- Pilih Produk --</option>
                     {products.map((p) => (
@@ -489,11 +608,13 @@ export default function AdminProductsPage() {
 
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                    Jumlah Stok Masuk (Unit, &ge; 1) *
+                    {editingBatch
+                      ? 'Stok Awal (Unit) *'
+                      : 'Jumlah Stok Masuk (Unit, ≥ 1) *'}
                   </label>
                   <input
                     type="number"
-                    min={1}
+                    min={editingBatch ? 0 : 1}
                     {...registerBatch('stokAwal')}
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
                   />
@@ -504,13 +625,32 @@ export default function AdminProductsPage() {
                   )}
                 </div>
 
+                {editingBatch && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                      Sisa Stok Online (Unit) *
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      {...registerBatch('stokOnline')}
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                    />
+                    {batchErrors.stokOnline && (
+                      <p className="mt-1 text-xs text-red-600">
+                        {batchErrors.stokOnline.message}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                    Tanggal Kedaluwarsa (Masa Depan) *
+                    Tanggal Kedaluwarsa *
                   </label>
                   <input
                     type="date"
-                    min={getDefaultFutureDate(1)}
+                    min={editingBatch ? undefined : getDefaultFutureDate(1)}
                     {...registerBatch('tanggalExp')}
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
                   />
@@ -555,7 +695,7 @@ export default function AdminProductsPage() {
               <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsBatchFormOpen(false)}
+                  onClick={handleCloseBatchForm}
                   className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
                 >
                   Batal
@@ -567,7 +707,9 @@ export default function AdminProductsPage() {
                 >
                   {isSubmittingBatch
                     ? 'Menyimpan Batch...'
-                    : 'Simpan Batch Stok FEFO'}
+                    : editingBatch
+                      ? 'Simpan Perubahan Batch'
+                      : 'Simpan Batch Stok FEFO'}
                 </button>
               </div>
             </form>
@@ -1057,6 +1199,9 @@ export default function AdminProductsPage() {
                     <th className="py-3 px-4 font-semibold">
                       Harga Khusus / Diskon
                     </th>
+                    <th className="py-3 px-4 font-semibold text-right">
+                      Aksi Batch
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1134,6 +1279,26 @@ export default function AdminProductsPage() {
                             </span>
                           ) : null}
                         </td>
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditBatch(b)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-semibold cursor-pointer"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteBatchTarget(b)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-[11px] font-semibold cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Hapus</span>
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -1142,6 +1307,52 @@ export default function AdminProductsPage() {
             </div>
           )}
         </section>
+
+        {/* Dialog Konfirmasi Hapus Batch */}
+        {deleteBatchTarget && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+          >
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-xl space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Hapus batch &ldquo;{deleteBatchTarget.idProdBatch}&rdquo;?
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Produk: <strong>{deleteBatchTarget.namaProduk}</strong> (Sisa
+                    stok online: {deleteBatchTarget.stokOnline} unit). Batch ini
+                    akan dihapus dari inventori aktif FEFO.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeletingBatch}
+                  onClick={() => setDeleteBatchTarget(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingBatch}
+                  onClick={handleConfirmDeleteBatch}
+                  className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
+                >
+                  {isDeletingBatch ? 'Menghapus...' : 'Ya, hapus batch'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Dialog Konfirmasi Hapus Produk */}
         {deleteTarget && (
