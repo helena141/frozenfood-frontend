@@ -149,7 +149,7 @@ export default function AdminProductsPage() {
     defaultValues: {
       productId: '',
       stokAwal: 50,
-      tanggalExp: getDefaultFutureDate(30),
+      tanggalExp: "",
       hargaOverride: '',
       diskon: '',
     },
@@ -215,7 +215,7 @@ export default function AdminProductsPage() {
     resetBatch({
       productId: preselectedProductId || products[0]?.idProduk || '',
       stokAwal: 50,
-      tanggalExp: getDefaultFutureDate(30),
+      tanggalExp: "",
       hargaOverride: '',
       diskon: '',
     });
