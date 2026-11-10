@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import axios from 'axios';
@@ -20,8 +20,9 @@ import {
   FileText,
   Package,
   Info,
-  Sparkles,
   QrCode,
+  Loader2,
+  ExternalLink,
 } from 'lucide-react';
 import { api } from '@/lib/axios';
 import {
@@ -30,13 +31,29 @@ import {
   formatWaktuSingkat,
   getErrorMessage,
 } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth-store';
 import {
   DeliveryResponse,
   PaymentResponse,
   OrderResponse,
 } from '@/types/api';
 import ShopSidebar from '@/components/shop/sidebar';
-import QrisDemoModal from '@/components/shop/qris-demo-modal';
+
+declare global {
+  interface Window {
+    snap?: {
+      pay: (
+        snapToken: string,
+        callbacks: {
+          onSuccess?: (result: Record<string, unknown>) => void;
+          onPending?: (result: Record<string, unknown>) => void;
+          onError?: (result: Record<string, unknown>) => void;
+          onClose?: () => void;
+        }
+      ) => void;
+    };
+  }
+}
 
 const PROGRESS_STEPS = [
   {
@@ -102,7 +119,7 @@ function parseValidPayment(raw: unknown): PaymentResponse | null {
     paidAt: typeof target.paidAt === 'string' ? target.paidAt : null,
     expiredAt: typeof target.expiredAt === 'string' ? target.expiredAt : null,
     createdAt: String(target.createdAt || ''),
-    updatedAt: String(target.createdAt || ''),
+    updatedAt: String(target.updatedAt || ''),
   };
 }
 
@@ -127,6 +144,7 @@ function parseValidDelivery(raw: unknown): DeliveryResponse | null {
 function OrderStatusContent() {
   const params = useParams<{ id: string }>();
   const idOrder = params?.id || '';
+  const user = useAuthStore((state) => state.user);
 
   const [todayYmd, setTodayYmd] = useState<string>('');
   const [cachedOrder, setCachedOrder] = useState<OrderResponse | null>(null);
@@ -139,9 +157,38 @@ function OrderStatusContent() {
   const [isDownloadingNota, setIsDownloadingNota] = useState(false);
   const [notaError, setNotaError] = useState<string | null>(null);
 
-  const [simulatePayError, setSimulatePayError] = useState<string | null>(null);
+  // State khusus Midtrans Snap Langsung
+  const [isSnapReady, setIsSnapReady] = useState(false);
+  const [isOpeningMidtrans, setIsOpeningMidtrans] = useState(false);
   const [isCreatingPay, setIsCreatingPay] = useState(false);
-  const [isQrisModalOpen, setIsQrisModalOpen] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [payNotice, setPayNotice] = useState<string | null>(null);
+  const hasAutoLaunchedRef = useRef(false);
+
+  // Load Script Midtrans Snap langsung di halaman ini
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const clientKey = process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY || '';
+    if (window.snap) {
+      setIsSnapReady(true);
+      return;
+    }
+
+    const existingScript = document.getElementById('midtrans-snap-script');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => setIsSnapReady(true));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'midtrans-snap-script';
+    script.src = 'https://app.sandbox.midtrans.com/snap/snap.js';
+    script.setAttribute('data-client-key', clientKey);
+    script.async = true;
+    script.onload = () => setIsSnapReady(true);
+    document.body.appendChild(script);
+  }, []);
 
   useEffect(() => {
     const now = new Date();
@@ -240,15 +287,123 @@ function OrderStatusContent() {
   const delivery = deliveryData ?? null;
   const payment = paymentData ?? cachedPayment ?? null;
 
-  const handleRefreshAll = () => {
+  const handleRefreshAll = useCallback(() => {
     refetchOrder();
     refetchDelivery();
     refetchPayment();
-  };
+  }, [refetchOrder, refetchDelivery, refetchPayment]);
 
-  const handleCreatePayment = async (metodePay: 'QRIS' | 'TRANSFER') => {
+  // Sinkronkan status LUNAS ke Backend Spring Boot saat pembayaran di Midtrans selesai
+  const syncBackendCallbackLunas = useCallback(
+    async (targetPayment: PaymentResponse) => {
+      try {
+        await api.post('/api/payments/callback', {
+          gatewayRef: targetPayment.gatewayRef,
+          status: 'LUNAS',
+          jumlahDikonfirmasi: targetPayment.jumlah,
+        });
+        setPayNotice(
+          'Pembayaran Midtrans berhasil! Status pesanan telah diperbarui menjadi LUNAS.'
+        );
+        handleRefreshAll();
+      } catch (err) {
+        setPayError(
+          getErrorMessage(
+            err,
+            'Gagal memperbarui status pembayaran ke server backend.'
+          )
+        );
+      }
+    },
+    [handleRefreshAll]
+  );
+
+  // Fungsi utama untuk langsung membuka Popup Midtrans Snap tanpa modal perantara
+  const launchMidtransSnapDirect = useCallback(
+    async (targetPayment: PaymentResponse) => {
+      setPayError(null);
+      setPayNotice(null);
+      setIsOpeningMidtrans(true);
+
+      try {
+        const res = await fetch('/api/midtrans/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            gatewayRef: targetPayment.gatewayRef,
+            jumlah: targetPayment.jumlah,
+            metodePay: targetPayment.metodePay,
+            customerName: user?.nama || 'Pelanggan Lezzat',
+            customerEmail: user?.email || 'customer@lezzat.id',
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.token) {
+          throw new Error(
+            data.message || 'Gagal mengambil token pembayaran dari Midtrans.'
+          );
+        }
+
+        if (!window.snap) {
+          throw new Error(
+            'Midtrans Snap sedang dimuat, silakan klik kembali tombol Bayar beberapa detik lagi.'
+          );
+        }
+
+        window.snap.pay(data.token, {
+          onSuccess: async () => {
+            await syncBackendCallbackLunas(targetPayment);
+          },
+          onPending: () => {
+            setPayNotice(
+              'Menunggu penyelesaian pembayaran di Midtrans. Setelah membayar di Simulator Midtrans, status akan menjadi LUNAS.'
+            );
+          },
+          onError: () => {
+            setPayError('Pembayaran gagal atau dibatalkan di Midtrans.');
+          },
+          onClose: () => {
+            // Popup ditutup oleh user
+          },
+        });
+      } catch (err) {
+        setPayError(
+          err instanceof Error
+            ? err.message
+            : 'Gagal membuka popup pembayaran Midtrans.'
+        );
+      } finally {
+        setIsOpeningMidtrans(false);
+      }
+    },
+    [user?.nama, user?.email, syncBackendCallbackLunas]
+  );
+
+  const isPaymentSettled =
+    payment?.status === 'LUNAS' ||
+    payment?.status === 'PAID' ||
+    payment?.status === 'SUCCESS';
+
+  // Otomatis munculkan popup Midtrans Snap begitu selesai Checkout (jika status masih PENDING)
+  useEffect(() => {
+    if (
+      isSnapReady &&
+      payment &&
+      !isPaymentSettled &&
+      !hasAutoLaunchedRef.current
+    ) {
+      hasAutoLaunchedRef.current = true;
+      launchMidtransSnapDirect(payment);
+    }
+  }, [isSnapReady, payment, isPaymentSettled, launchMidtransSnapDirect]);
+
+  // Buat record payment baru (misal setelah ongkir PIHAK_KETIGA dikonfirmasi admin) lalu langsung buka Midtrans
+  const handleCreateAndOpenMidtrans = async (
+    metodePay: 'QRIS' | 'TRANSFER'
+  ) => {
     if (!idOrder) return;
-    setSimulatePayError(null);
+    setPayError(null);
     setIsCreatingPay(true);
     try {
       const res = await api.post('/api/payments', {
@@ -258,12 +413,12 @@ function OrderStatusContent() {
       const created = parseValidPayment(res.data);
       if (created) {
         setCachedPayment(created);
+        await refetchPayment();
+        await launchMidtransSnapDirect(created);
       }
-      await refetchPayment();
-      setIsQrisModalOpen(true);
     } catch (error) {
-      setSimulatePayError(
-        getErrorMessage(error, 'Gagal membuat pembayaran ke backend.')
+      setPayError(
+        getErrorMessage(error, 'Gagal menginisiasi pembayaran ke backend.')
       );
     } finally {
       setIsCreatingPay(false);
@@ -323,11 +478,6 @@ function OrderStatusContent() {
     delivery && !isOngkirPendingAdmin ? delivery.ongkir : 0;
 
   const totalTagihanAkhir = subtotalBarang + ongkirPengiriman;
-
-  const isPaymentSettled =
-    payment?.status === 'LUNAS' ||
-    payment?.status === 'PAID' ||
-    payment?.status === 'SUCCESS';
 
   const formattedEstimasi = delivery?.estimasiTiba
     ? formatEstimasiTiba(
@@ -624,11 +774,12 @@ function OrderStatusContent() {
                 )}
               </section>
 
+              {/* Kartu Pembayaran Langsung ke Midtrans Snap */}
               <section className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                     <CreditCard className="w-4 h-4 text-[#174634]" />
-                    <span>Informasi Pembayaran & Demo QRIS</span>
+                    <span>Pembayaran Online (Midtrans)</span>
                   </h2>
                   {payment && (
                     <span
@@ -643,13 +794,26 @@ function OrderStatusContent() {
                   )}
                 </div>
 
+                {payError && (
+                  <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{payError}</span>
+                  </div>
+                )}
+
+                {payNotice && (
+                  <div className="flex items-start gap-2 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs text-[#174634] font-medium">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{payNotice}</span>
+                  </div>
+                )}
+
                 {!payment ? (
                   <div className="rounded-2xl bg-[#f7f6f2] p-5 text-center space-y-3">
                     {isOngkirPendingAdmin ? (
                       <p className="text-xs text-amber-800 font-medium">
-                        Ongkir sedang menunggu konfirmasi admin. Tombol
-                        pembayaran QRIS akan aktif setelah admin menetapkan
-                        ongkir.
+                        Ongkir sedang menunggu konfirmasi admin. Pembayaran
+                        Midtrans akan aktif setelah admin menetapkan ongkir.
                       </p>
                     ) : isDeliveryCancelled ? (
                       <p className="text-xs text-slate-500">
@@ -658,14 +822,9 @@ function OrderStatusContent() {
                     ) : (
                       <>
                         <p className="text-xs text-slate-600">
-                          Pilih metode pembayaran untuk memunculkan kode QRIS /
-                          Virtual Account:
+                          Pilih metode pembayaran untuk langsung membuka
+                          Midtrans:
                         </p>
-                        {simulatePayError && (
-                          <p className="text-xs text-red-600 font-medium">
-                            {simulatePayError}
-                          </p>
-                        )}
                         <div className="flex justify-center gap-2 pt-1">
                           <button
                             type="button"
@@ -676,7 +835,7 @@ function OrderStatusContent() {
                                 : 'border-slate-200 bg-white text-slate-700'
                             }`}
                           >
-                            QRIS (Scan QR)
+                            QRIS
                           </button>
                           <button
                             type="button"
@@ -687,21 +846,30 @@ function OrderStatusContent() {
                                 : 'border-slate-200 bg-white text-slate-700'
                             }`}
                           >
-                            TRANSFER VA
+                            Transfer Virtual Account
                           </button>
                         </div>
                         <button
                           type="button"
-                          disabled={isCreatingPay}
-                          onClick={() => handleCreatePayment(selectedPayMethod)}
-                          className="w-full mt-2 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#174634] hover:bg-[#113527] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
+                          disabled={isCreatingPay || isOpeningMidtrans}
+                          onClick={() =>
+                            handleCreateAndOpenMidtrans(selectedPayMethod)
+                          }
+                          className="w-full mt-2 inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-[#174634] hover:bg-[#113527] disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
                         >
-                          <QrCode className="w-4 h-4" />
-                          <span>
-                            {isCreatingPay
-                              ? 'Membuat Tagihan QRIS...'
-                              : `Buat Tagihan & Buka Demo ${selectedPayMethod}`}
-                          </span>
+                          {isCreatingPay || isOpeningMidtrans ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Menghubungkan ke Midtrans...</span>
+                            </>
+                          ) : (
+                            <>
+                              <QrCode className="w-4 h-4" />
+                              <span>
+                                Bayar Sekarang via Midtrans ({selectedPayMethod})
+                              </span>
+                            </>
+                          )}
                         </button>
                       </>
                     )}
@@ -760,19 +928,51 @@ function OrderStatusContent() {
                       </div>
                     </div>
 
+                    {/* Tombol Langsung Buka Midtrans Snap (Tanpa Modal Perantara) */}
                     {!isPaymentSettled && (
-                      <div className="pt-3 border-t border-slate-100 space-y-2">
+                      <div className="pt-3 border-t border-slate-100 space-y-2.5">
                         <button
                           type="button"
-                          onClick={() => setIsQrisModalOpen(true)}
-                          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-4 text-xs shadow-sm transition-colors cursor-pointer"
+                          disabled={isOpeningMidtrans || !isSnapReady}
+                          onClick={() => launchMidtransSnapDirect(payment)}
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#174634] hover:bg-[#113527] disabled:opacity-60 text-white font-bold py-3.5 px-4 text-xs shadow-sm transition-colors cursor-pointer"
                         >
-                          <QrCode className="w-4 h-4" />
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>
-                            Buka QRIS & Simulasikan Pembayaran Lunas (Demo)
-                          </span>
+                          {isOpeningMidtrans ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Membuka Midtrans Snap...</span>
+                            </>
+                          ) : (
+                            <>
+                              <QrCode className="w-4 h-4" />
+                              <span>
+                                {payment.metodePay === 'TRANSFER'
+                                  ? 'Bayar via Virtual Account (Midtrans)'
+                                  : 'Tampilkan QRIS & Bayar (Midtrans)'}
+                              </span>
+                            </>
+                          )}
                         </button>
+
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
+                          <a
+                            href="https://simulator.sandbox.midtrans.com"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline"
+                          >
+                            <span>Simulator Midtrans Sandbox</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+
+                          <button
+                            type="button"
+                            onClick={() => syncBackendCallbackLunas(payment)}
+                            className="font-semibold text-[#174634] hover:underline cursor-pointer"
+                          >
+                            Cek / Konfirmasi Status Lunas
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -878,18 +1078,6 @@ function OrderStatusContent() {
               )}
             </section>
           </div>
-        )}
-
-        {payment && (
-          <QrisDemoModal
-            isOpen={isQrisModalOpen}
-            onClose={() => setIsQrisModalOpen(false)}
-            gatewayRef={payment.gatewayRef}
-            jumlah={payment.jumlah}
-            metodePay={payment.metodePay}
-            idOrder={idOrder}
-            onSuccess={handleRefreshAll}
-          />
         )}
       </main>
     </div>
