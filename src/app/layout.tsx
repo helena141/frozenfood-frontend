@@ -1,22 +1,26 @@
-import React from 'react';
 import type { Metadata } from 'next';
-import { Plus_Jakarta_Sans, Fraunces } from 'next/font/google';
+import { Plus_Jakarta_Sans, Inter } from 'next/font/google';
 import './globals.css';
 import QueryProvider from '@/components/providers/query-provider';
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
-  variable: '--font-sans',
+  weight: ['500', '600', '700', '800'],
+  variable: '--font-jakarta',
+  display: 'swap',
 });
 
-const fraunces = Fraunces({
+const inter = Inter({
   subsets: ['latin'],
-  variable: '--font-serif',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-inter',
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
-  title: 'Lezzat Frozen Food — Segar & Praktis Setiap Saat',
-  description: 'Belanja frozen food eceran dan grosir dengan pengiriman terjaga beku.',
+  title: 'Froznfood 2.0 — Freshness in Every Bite',
+  description:
+    'Modern Premium Frozen Food Marketplace. Pilihan frozen food berkualitas dengan penyimpanan rantai dingin terjaga dan pengiriman cepat.',
 };
 
 export default function RootLayout({
@@ -25,8 +29,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id" className={`${plusJakarta.variable} ${fraunces.variable}`}>
-      <body className="antialiased">
+    <html lang="id" className={`${plusJakarta.variable} ${inter.variable}`}>
+      <body className="antialiased selection:bg-[#4737FF] selection:text-white">
         <QueryProvider>{children}</QueryProvider>
       </body>
     </html>

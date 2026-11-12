@@ -157,7 +157,6 @@ function OrderStatusContent() {
   const [isDownloadingNota, setIsDownloadingNota] = useState(false);
   const [notaError, setNotaError] = useState<string | null>(null);
 
-  // State khusus Midtrans Snap Langsung
   const [isSnapReady, setIsSnapReady] = useState(false);
   const [isOpeningMidtrans, setIsOpeningMidtrans] = useState(false);
   const [isCreatingPay, setIsCreatingPay] = useState(false);
@@ -165,7 +164,6 @@ function OrderStatusContent() {
   const [payNotice, setPayNotice] = useState<string | null>(null);
   const hasAutoLaunchedRef = useRef(false);
 
-  // Load Script Midtrans Snap langsung di halaman ini
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -293,7 +291,6 @@ function OrderStatusContent() {
     refetchPayment();
   }, [refetchOrder, refetchDelivery, refetchPayment]);
 
-  // Sinkronkan status LUNAS ke Backend Spring Boot saat pembayaran di Midtrans selesai
   const syncBackendCallbackLunas = useCallback(
     async (targetPayment: PaymentResponse) => {
       try {
@@ -318,7 +315,6 @@ function OrderStatusContent() {
     [handleRefreshAll]
   );
 
-  // Fungsi utama untuk langsung membuka Popup Midtrans Snap tanpa modal perantara
   const launchMidtransSnapDirect = useCallback(
     async (targetPayment: PaymentResponse) => {
       setPayError(null);
@@ -333,8 +329,8 @@ function OrderStatusContent() {
             gatewayRef: targetPayment.gatewayRef,
             jumlah: targetPayment.jumlah,
             metodePay: targetPayment.metodePay,
-            customerName: user?.nama || 'Pelanggan Lezzat',
-            customerEmail: user?.email || 'customer@lezzat.id',
+            customerName: user?.nama || 'Pelanggan Froznfood',
+            customerEmail: user?.email || 'customer@froznfood.id',
           }),
         });
 
@@ -385,7 +381,6 @@ function OrderStatusContent() {
     payment?.status === 'PAID' ||
     payment?.status === 'SUCCESS';
 
-  // Otomatis munculkan popup Midtrans Snap begitu selesai Checkout (jika status masih PENDING)
   useEffect(() => {
     if (
       isSnapReady &&
@@ -398,7 +393,6 @@ function OrderStatusContent() {
     }
   }, [isSnapReady, payment, isPaymentSettled, launchMidtransSnapDirect]);
 
-  // Buat record payment baru (misal setelah ongkir PIHAK_KETIGA dikonfirmasi admin) lalu langsung buka Midtrans
   const handleCreateAndOpenMidtrans = async (
     metodePay: 'QRIS' | 'TRANSFER'
   ) => {
@@ -494,10 +488,11 @@ function OrderStatusContent() {
       <ShopSidebar />
 
       <main className="lezzat-main">
+        {/* Top Action Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <Link
             href="/orders"
-            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-[#174634]"
+            className="inline-flex items-center gap-2 text-xs font-bold text-[#5E5E6A] hover:text-[#4737FF] transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Kembali ke Riwayat Pesanan</span>
@@ -507,9 +502,9 @@ function OrderStatusContent() {
             <button
               type="button"
               onClick={handleRefreshAll}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white border border-[#E6E8F0] hover:bg-[#F1F3F8] text-[#171725] text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-3.5 h-3.5 text-[#4737FF]" />
               <span>Muat Ulang Status</span>
             </button>
 
@@ -517,7 +512,7 @@ function OrderStatusContent() {
               type="button"
               onClick={handleDownloadNota}
               disabled={isDownloadingNota}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#174634] hover:bg-[#113527] disabled:opacity-60 text-white text-xs font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4737FF] hover:bg-[#3529BF] disabled:opacity-60 text-white text-xs font-bold shadow-sm shadow-[#4737FF]/25 transition-all cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span>
@@ -527,11 +522,12 @@ function OrderStatusContent() {
           </div>
         </div>
 
+        {/* Page Title */}
         <div className="mb-6">
-          <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">
-            STATUS PESANAN & LACAK PENGIRIMAN
+          <p className="text-[11px] font-extrabold tracking-[0.16em] text-[#4737FF] uppercase">
+            FROZNFOOD 2.0 • ORDER DETAILS & COLD-CHAIN TRACKING
           </p>
-          <h1 className="font-serif-title text-2xl sm:text-3xl font-bold text-slate-900 break-all">
+          <h1 className="font-heading text-2xl sm:text-3xl font-extrabold text-[#171725] break-all mt-1">
             Pesanan #{idOrder}
           </h1>
         </div>
@@ -539,7 +535,7 @@ function OrderStatusContent() {
         {notaError && (
           <div
             role="alert"
-            className="mb-6 flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-700"
+            className="mb-6 flex items-start gap-2.5 rounded-2xl border border-[#E5484D]/30 bg-[#E5484D]/10 p-4 text-xs text-[#E5484D] font-medium"
           >
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{notaError}</span>
@@ -548,21 +544,21 @@ function OrderStatusContent() {
 
         {isLoading && (
           <div className="space-y-6 animate-pulse">
-            <div className="bg-white rounded-3xl p-6 border border-slate-200 h-44" />
+            <div className="ff-card bg-white p-6 h-44" />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-3xl p-6 border border-slate-200 h-64" />
-              <div className="bg-white rounded-3xl p-6 border border-slate-200 h-64" />
+              <div className="ff-card bg-white p-6 h-64" />
+              <div className="ff-card bg-white p-6 h-64" />
             </div>
           </div>
         )}
 
         {!isLoading && (isErrorDelivery || isErrorPayment) && (
-          <div className="bg-white rounded-3xl p-8 border border-red-200 text-center max-w-lg mx-auto my-8">
-            <AlertCircle className="w-10 h-10 text-red-600 mx-auto mb-3" />
-            <h2 className="text-base font-bold text-slate-900 mb-1">
+          <div className="ff-card bg-white p-8 border border-[#E5484D]/30 text-center max-w-lg mx-auto my-8">
+            <AlertCircle className="w-10 h-10 text-[#E5484D] mx-auto mb-3" />
+            <h2 className="font-heading text-base font-bold text-[#171725] mb-1">
               Gagal Memuat Data Pesanan
             </h2>
-            <p className="text-xs text-slate-500 mb-5">
+            <p className="text-xs text-[#77788A] mb-5">
               {getErrorMessage(
                 errorDelivery || errorPayment,
                 'Terjadi kesalahan saat menghubungi server.'
@@ -571,7 +567,7 @@ function OrderStatusContent() {
             <button
               type="button"
               onClick={handleRefreshAll}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#174634] text-white text-xs font-semibold cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4737FF] text-white text-xs font-bold cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Coba Muat Ulang</span>
@@ -581,19 +577,20 @@ function OrderStatusContent() {
 
         {!isLoading && !isErrorDelivery && !isErrorPayment && (
           <div className="space-y-6">
-            <section className="bg-white rounded-3xl p-6 border border-slate-200">
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-4 mb-6 border-b border-slate-100">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-[#f2efe9] text-[#174634] flex items-center justify-center">
-                    <Truck className="w-4 h-4" />
+            {/* Timeline Status Pengiriman */}
+            <section className="ff-card bg-white p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-4 mb-6 border-b border-[#E6E8F0]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#E7EFFF] text-[#4737FF] flex items-center justify-center">
+                    <Truck className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-slate-900">
+                    <h2 className="font-heading text-base font-extrabold text-[#171725]">
                       Timeline Status Pengiriman
                     </h2>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-[#77788A]">
                       Status saat ini:{' '}
-                      <strong className="text-[#174634]">
+                      <strong className="text-[#4737FF]">
                         {delivery
                           ? delivery.statusDelivery
                           : 'Belum ada pengiriman'}
@@ -603,11 +600,11 @@ function OrderStatusContent() {
                 </div>
 
                 {formattedEstimasi && (
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-200 text-xs text-[#174634]">
-                    <Clock className="w-4 h-4 shrink-0 text-[#174634]" />
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#E7EFFF] border border-[#D1CDFF] text-xs text-[#4737FF]">
+                    <Clock className="w-4 h-4 shrink-0 text-[#4737FF]" />
                     <span>
                       Estimasi Tiba:{' '}
-                      <strong className="font-extrabold text-sm">
+                      <strong className="font-extrabold text-sm text-[#171725]">
                         {formattedEstimasi}
                       </strong>
                     </span>
@@ -616,17 +613,17 @@ function OrderStatusContent() {
               </div>
 
               {!delivery ? (
-                <div className="rounded-2xl bg-[#f7f6f2] p-6 text-center text-xs text-slate-500">
+                <div className="rounded-2xl bg-[#F8FAFF] p-6 text-center text-xs text-[#77788A]">
                   Belum ada data pengiriman untuk ID pesanan ini.
                 </div>
               ) : isWarningStatus ? (
-                <div className="flex items-start gap-3 rounded-2xl bg-amber-50 border border-amber-300 p-4 text-xs text-amber-900">
-                  <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 rounded-2xl bg-[#E5484D]/10 border border-[#E5484D]/30 p-4 text-xs text-[#E5484D]">
+                  <XCircle className="w-5 h-5 text-[#E5484D] shrink-0 mt-0.5" />
                   <div>
                     <p className="font-bold text-sm mb-0.5">
                       Status Pengiriman: {currentStatus}
                     </p>
-                    <p>
+                    <p className="text-[#171725]">
                       {currentStatus === 'GAGAL_KIRIM'
                         ? 'Pengiriman mengalami kendala dan gagal dikirim ke tujuan.'
                         : 'Pengiriman pesanan ini telah dibatalkan.'}
@@ -634,8 +631,8 @@ function OrderStatusContent() {
                   </div>
                 </div>
               ) : isUnknownStatus ? (
-                <div className="flex items-start gap-3 rounded-2xl bg-slate-100 border border-slate-300 p-4 text-xs text-slate-800">
-                  <Info className="w-5 h-5 text-slate-600 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 rounded-2xl bg-[#F8FAFF] border border-[#E6E8F0] p-4 text-xs text-[#171725]">
+                  <Info className="w-5 h-5 text-[#4737FF] shrink-0 mt-0.5" />
                   <div>
                     <p className="font-bold text-sm mb-0.5">
                       Status Pengiriman: {currentStatus}
@@ -652,32 +649,38 @@ function OrderStatusContent() {
                     return (
                       <div
                         key={step.key}
-                        className={`rounded-2xl p-4 border transition-all ${
+                        className={`rounded-2xl p-4 border-2 transition-all ${
                           isCurrent
-                            ? 'border-[#174634] bg-[#174634]/5 shadow-xs'
+                            ? 'border-[#4737FF] bg-[#E7EFFF]/60 shadow-sm'
                             : isCompleted
-                              ? 'border-emerald-200 bg-emerald-50/40'
-                              : 'border-slate-200/80 bg-slate-50/60 opacity-65'
+                              ? 'border-[#159A68]/40 bg-[#159A68]/5'
+                              : 'border-[#E6E8F0] bg-[#F8FAFF] opacity-65'
                         }`}
                       >
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center justify-between mb-2.5">
                           <span
-                            className={`w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center ${
-                              isCompleted
-                                ? 'bg-[#174634] text-white'
-                                : 'bg-slate-200 text-slate-600'
+                            className={`w-6 h-6 rounded-full text-[11px] font-extrabold flex items-center justify-center ${
+                              isCurrent
+                                ? 'bg-[#4737FF] text-white'
+                                : isCompleted
+                                  ? 'bg-[#159A68] text-white'
+                                  : 'bg-[#E6E8F0] text-[#5E5E6A]'
                             }`}
                           >
                             {index + 1}
                           </span>
                           {isCompleted && (
-                            <CheckCircle2 className="w-4 h-4 text-[#174634]" />
+                            <CheckCircle2
+                              className={`w-4 h-4 ${
+                                isCurrent ? 'text-[#4737FF]' : 'text-[#159A68]'
+                              }`}
+                            />
                           )}
                         </div>
-                        <p className="text-xs font-bold text-slate-900 mb-1">
+                        <p className="font-heading text-xs font-extrabold text-[#171725] mb-1">
                           {step.label}
                         </p>
-                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                        <p className="text-[11px] text-[#77788A] leading-relaxed">
                           {step.desc}
                         </p>
                       </div>
@@ -687,85 +690,87 @@ function OrderStatusContent() {
               )}
             </section>
 
+            {/* Grid 2 Kolom: Detail Pengiriman & Pembayaran Midtrans */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <section className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-[#174634]" />
+              {/* Kartu Detail Pengiriman */}
+              <section className="ff-card bg-white p-6 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-[#E6E8F0]">
+                  <h2 className="font-heading text-sm font-extrabold text-[#171725] flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-[#4737FF]" />
                     <span>Detail Pengiriman (Smart Delivery)</span>
                   </h2>
                   {delivery && (
-                    <span className="px-2.5 py-1 rounded-full bg-[#f2efe9] text-[#174634] text-[10px] font-bold uppercase">
+                    <span className="px-2.5 py-1 rounded-md bg-[#E7EFFF] text-[#4737FF] text-[10px] font-extrabold uppercase">
                       {delivery.metodeDeliv}
                     </span>
                   )}
                 </div>
 
                 {!delivery ? (
-                  <div className="rounded-2xl bg-[#f7f6f2] p-5 text-center text-xs text-slate-500">
+                  <div className="rounded-2xl bg-[#F8FAFF] p-5 text-center text-xs text-[#77788A]">
                     Belum ada pengiriman untuk pesanan ini.
                   </div>
                 ) : (
                   <div className="space-y-3 text-xs">
-                    <div>
-                      <span className="text-slate-400 block mb-0.5">
+                    <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-[#E6E8F0]">
+                      <span className="text-[#77788A] block text-[10px] mb-0.5">
                         Alamat Tujuan
                       </span>
-                      <p className="font-semibold text-slate-800">
+                      <p className="font-bold text-[#171725]">
                         {delivery.alamatTujuan}
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                      <div className="p-3 rounded-2xl bg-[#f7f6f2]">
-                        <span className="text-slate-400 block text-[10px]">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-[#E6E8F0]">
+                        <span className="text-[#77788A] block text-[10px]">
                           Jarak & Sumber
                         </span>
-                        <span className="font-bold text-slate-900">
+                        <span className="font-extrabold text-[#171725] text-sm">
                           {delivery.jarak} km
                         </span>
-                        <span className="block text-[10px] text-slate-500">
+                        <span className="block text-[10px] text-[#77788A] mt-0.5">
                           {delivery.sumberJarak || '-'}
                         </span>
                       </div>
 
-                      <div className="p-3 rounded-2xl bg-[#f7f6f2]">
-                        <span className="text-slate-400 block text-[10px]">
+                      <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-[#E6E8F0]">
+                        <span className="text-[#77788A] block text-[10px]">
                           Pelaksana & Ongkir
                         </span>
                         {isOngkirPendingAdmin ? (
-                          <span className="font-bold text-amber-700 block">
+                          <span className="font-bold text-[#D97706] block">
                             Menunggu konfirmasi admin
                           </span>
                         ) : (
-                          <span className="font-bold text-[#174634] block">
+                          <span className="font-extrabold text-[#4737FF] text-sm block">
                             {delivery.ongkir === 0
                               ? 'GRATIS'
                               : formatRupiah(delivery.ongkir)}
                           </span>
                         )}
-                        <span className="block text-[10px] text-slate-500">
+                        <span className="block text-[10px] text-[#77788A] mt-0.5">
                           {delivery.pelaksana}
                         </span>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3.5 rounded-2xl bg-[#f7f6f2]">
-                        <span className="text-slate-400 block text-[10px] mb-1">
+                      <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-[#E6E8F0]">
+                        <span className="text-[#77788A] block text-[10px] mb-1">
                           Nama Pengantar / Kurir
                         </span>
-                        <span className="font-bold text-slate-900 flex items-center gap-1">
-                          <User className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="font-bold text-[#171725] flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-[#4737FF]" />
                           {delivery.namaPengantar || 'Belum ditugaskan'}
                         </span>
                       </div>
 
-                      <div className="p-3.5 rounded-2xl bg-emerald-50/90 border border-emerald-200">
-                        <span className="text-emerald-800/75 font-medium block text-[10px] uppercase tracking-wider mb-1">
+                      <div className="p-3.5 rounded-2xl bg-[#E7EFFF] border border-[#D1CDFF]">
+                        <span className="text-[#4737FF] font-bold block text-[10px] uppercase tracking-wider mb-1">
                           Estimasi Tiba (WIB)
                         </span>
-                        <span className="font-extrabold text-sm sm:text-base text-[#174634] block leading-tight">
+                        <span className="font-extrabold text-sm sm:text-base text-[#171725] block leading-tight">
                           {formattedEstimasi || 'Menunggu jadwal'}
                         </span>
                       </div>
@@ -775,18 +780,18 @@ function OrderStatusContent() {
               </section>
 
               {/* Kartu Pembayaran Langsung ke Midtrans Snap */}
-              <section className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-[#174634]" />
+              <section className="ff-card bg-white p-6 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-[#E6E8F0]">
+                  <h2 className="font-heading text-sm font-extrabold text-[#171725] flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-[#4737FF]" />
                     <span>Pembayaran Online (Midtrans)</span>
                   </h2>
                   {payment && (
                     <span
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
                         isPaymentSettled
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-amber-100 text-amber-800'
+                          ? 'bg-[#159A68]/15 text-[#159A68]'
+                          : 'bg-[#D97706]/15 text-[#D97706]'
                       }`}
                     >
                       {payment.status}
@@ -795,33 +800,33 @@ function OrderStatusContent() {
                 </div>
 
                 {payError && (
-                  <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+                  <div className="flex items-start gap-2 rounded-xl bg-[#E5484D]/10 border border-[#E5484D]/30 p-3 text-xs text-[#E5484D] font-medium">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>{payError}</span>
                   </div>
                 )}
 
                 {payNotice && (
-                  <div className="flex items-start gap-2 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs text-[#174634] font-medium">
+                  <div className="flex items-start gap-2 rounded-xl bg-[#159A68]/10 border border-[#159A68]/30 p-3 text-xs text-[#159A68] font-semibold">
                     <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>{payNotice}</span>
                   </div>
                 )}
 
                 {!payment ? (
-                  <div className="rounded-2xl bg-[#f7f6f2] p-5 text-center space-y-3">
+                  <div className="rounded-2xl bg-[#F8FAFF] border border-[#E6E8F0] p-5 text-center space-y-3">
                     {isOngkirPendingAdmin ? (
-                      <p className="text-xs text-amber-800 font-medium">
+                      <p className="text-xs text-[#D97706] font-semibold">
                         Ongkir sedang menunggu konfirmasi admin. Pembayaran
                         Midtrans akan aktif setelah admin menetapkan ongkir.
                       </p>
                     ) : isDeliveryCancelled ? (
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-[#77788A]">
                         Pengiriman dibatalkan. Pembayaran tidak dapat diproses.
                       </p>
                     ) : (
                       <>
-                        <p className="text-xs text-slate-600">
+                        <p className="text-xs text-[#5E5E6A]">
                           Pilih metode pembayaran untuk langsung membuka
                           Midtrans:
                         </p>
@@ -829,10 +834,10 @@ function OrderStatusContent() {
                           <button
                             type="button"
                             onClick={() => setSelectedPayMethod('QRIS')}
-                            className={`px-3.5 py-2 rounded-xl border text-xs font-bold cursor-pointer ${
+                            className={`px-3.5 py-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
                               selectedPayMethod === 'QRIS'
-                                ? 'border-[#174634] bg-[#174634] text-white'
-                                : 'border-slate-200 bg-white text-slate-700'
+                                ? 'border-[#4737FF] bg-[#4737FF] text-white shadow-xs'
+                                : 'border-[#E6E8F0] bg-white text-[#171725]'
                             }`}
                           >
                             QRIS
@@ -840,10 +845,10 @@ function OrderStatusContent() {
                           <button
                             type="button"
                             onClick={() => setSelectedPayMethod('TRANSFER')}
-                            className={`px-3.5 py-2 rounded-xl border text-xs font-bold cursor-pointer ${
+                            className={`px-3.5 py-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
                               selectedPayMethod === 'TRANSFER'
-                                ? 'border-[#174634] bg-[#174634] text-white'
-                                : 'border-slate-200 bg-white text-slate-700'
+                                ? 'border-[#4737FF] bg-[#4737FF] text-white shadow-xs'
+                                : 'border-[#E6E8F0] bg-white text-[#171725]'
                             }`}
                           >
                             Transfer Virtual Account
@@ -855,7 +860,7 @@ function OrderStatusContent() {
                           onClick={() =>
                             handleCreateAndOpenMidtrans(selectedPayMethod)
                           }
-                          className="w-full mt-2 inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-[#174634] hover:bg-[#113527] disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
+                          className="w-full mt-2 inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-[#F75C03] hover:bg-[#D94800] disabled:opacity-50 text-white text-xs font-extrabold shadow-md shadow-[#F75C03]/25 transition-all cursor-pointer"
                         >
                           {isCreatingPay || isOpeningMidtrans ? (
                             <>
@@ -877,50 +882,50 @@ function OrderStatusContent() {
                 ) : (
                   <div className="space-y-3 text-xs">
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 rounded-2xl bg-[#f7f6f2]">
-                        <span className="text-slate-400 block text-[10px]">
+                      <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-[#E6E8F0]">
+                        <span className="text-[#77788A] block text-[10px]">
                           Metode Pembayaran
                         </span>
-                        <span className="font-bold text-slate-900">
+                        <span className="font-extrabold text-[#171725]">
                           {payment.metodePay}
                         </span>
                       </div>
 
-                      <div className="p-3 rounded-2xl bg-[#f7f6f2]">
-                        <span className="text-slate-400 block text-[10px]">
+                      <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-[#E6E8F0]">
+                        <span className="text-[#77788A] block text-[10px]">
                           Total Tagihan (Payment.jumlah)
                         </span>
-                        <span className="font-bold text-[#174634] text-sm">
+                        <span className="font-extrabold text-[#4737FF] text-sm">
                           {formatRupiah(payment.jumlah)}
                         </span>
                       </div>
                     </div>
 
-                    <div className="p-3.5 rounded-2xl bg-[#f7f6f2]">
-                      <span className="text-slate-400 block text-[10px]">
+                    <div className="p-3.5 rounded-2xl bg-[#F8FAFF] border border-[#E6E8F0]">
+                      <span className="text-[#77788A] block text-[10px]">
                         Kode Referensi Gateway (gatewayRef)
                       </span>
-                      <span className="font-mono font-bold text-slate-900 text-xs">
+                      <span className="font-mono font-bold text-[#171725] text-xs">
                         {payment.gatewayRef}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <span className="text-slate-400 block text-[10px]">
+                        <span className="text-[#77788A] block text-[10px]">
                           Waktu Pembayaran (paidAt)
                         </span>
-                        <span className="font-medium text-slate-800">
+                        <span className="font-semibold text-[#171725]">
                           {payment.paidAt
                             ? formatWaktuSingkat(payment.paidAt)
                             : 'Menunggu Pembayaran'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-400 block text-[10px]">
+                        <span className="text-[#77788A] block text-[10px]">
                           Batas Waktu (expiredAt)
                         </span>
-                        <span className="font-medium text-slate-800">
+                        <span className="font-semibold text-[#171725]">
                           {payment.expiredAt
                             ? formatWaktuSingkat(payment.expiredAt)
                             : '-'}
@@ -928,14 +933,13 @@ function OrderStatusContent() {
                       </div>
                     </div>
 
-                    {/* Tombol Langsung Buka Midtrans Snap (Tanpa Modal Perantara) */}
                     {!isPaymentSettled && (
-                      <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                      <div className="pt-3 border-t border-[#E6E8F0] space-y-2.5">
                         <button
                           type="button"
                           disabled={isOpeningMidtrans || !isSnapReady}
                           onClick={() => launchMidtransSnapDirect(payment)}
-                          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#174634] hover:bg-[#113527] disabled:opacity-60 text-white font-bold py-3.5 px-4 text-xs shadow-sm transition-colors cursor-pointer"
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#F75C03] hover:bg-[#D94800] disabled:opacity-60 text-white font-extrabold py-3.5 px-4 text-xs shadow-md shadow-[#F75C03]/25 transition-all cursor-pointer"
                         >
                           {isOpeningMidtrans ? (
                             <>
@@ -954,12 +958,12 @@ function OrderStatusContent() {
                           )}
                         </button>
 
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
+                        <div className="flex items-center justify-between text-[11px] text-[#77788A] px-1">
                           <a
                             href="https://simulator.sandbox.midtrans.com"
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline"
+                            className="inline-flex items-center gap-1 font-bold text-[#2563EB] hover:underline"
                           >
                             <span>Simulator Midtrans Sandbox</span>
                             <ExternalLink className="w-3 h-3" />
@@ -968,7 +972,7 @@ function OrderStatusContent() {
                           <button
                             type="button"
                             onClick={() => syncBackendCallbackLunas(payment)}
-                            className="font-semibold text-[#174634] hover:underline cursor-pointer"
+                            className="font-bold text-[#4737FF] hover:underline cursor-pointer"
                           >
                             Cek / Konfirmasi Status Lunas
                           </button>
@@ -980,17 +984,18 @@ function OrderStatusContent() {
               </section>
             </div>
 
-            <section className="bg-white rounded-3xl p-6 border border-slate-200">
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
-                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Package className="w-4 h-4 text-[#174634]" />
+            {/* Tabel Rincian Item & Total Keseluruhan */}
+            <section className="ff-card bg-white p-6">
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#E6E8F0]">
+                <h2 className="font-heading text-sm font-extrabold text-[#171725] flex items-center gap-2">
+                  <Package className="w-4 h-4 text-[#4737FF]" />
                   <span>Rincian Item & Total Keseluruhan</span>
                 </h2>
                 <button
                   type="button"
                   onClick={handleDownloadNota}
                   disabled={isDownloadingNota}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#174634] hover:underline cursor-pointer"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#4737FF] hover:underline cursor-pointer"
                 >
                   <FileText className="w-3.5 h-3.5" />
                   <span>Unduh Nota Resmi (PDF)</span>
@@ -1002,32 +1007,32 @@ function OrderStatusContent() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead>
-                        <tr className="border-b border-slate-200 text-slate-400">
-                          <th className="pb-2 font-semibold">Nama Produk</th>
-                          <th className="pb-2 font-semibold">Batch FEFO</th>
-                          <th className="pb-2 font-semibold">Harga Satuan</th>
-                          <th className="pb-2 font-semibold">Qty</th>
-                          <th className="pb-2 font-semibold text-right">
+                        <tr className="border-b border-[#E6E8F0] text-[#77788A] uppercase tracking-wider text-[11px]">
+                          <th className="pb-2.5 font-bold">Nama Produk</th>
+                          <th className="pb-2.5 font-bold">Batch FEFO</th>
+                          <th className="pb-2.5 font-bold">Harga Satuan</th>
+                          <th className="pb-2.5 font-bold">Qty</th>
+                          <th className="pb-2.5 font-bold text-right">
                             Subtotal Barang
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-[#E6E8F0]">
                         {activeOrder.items.map((item) => (
                           <tr key={item.idOrderItem}>
-                            <td className="py-3 font-bold text-slate-900">
+                            <td className="py-3.5 font-bold text-[#171725]">
                               {item.namaProduk}
                             </td>
-                            <td className="py-3 font-mono text-[11px] text-slate-500">
+                            <td className="py-3.5 font-mono text-[11px] text-[#77788A]">
                               {item.idProdBatch}
                             </td>
-                            <td className="py-3 text-slate-600">
+                            <td className="py-3.5 text-[#5E5E6A]">
                               {formatRupiah(item.hargaSatuanSnapshot)}
                             </td>
-                            <td className="py-3 font-semibold text-slate-800">
+                            <td className="py-3.5 font-bold text-[#171725]">
                               {item.quantity}
                             </td>
-                            <td className="py-3 font-bold text-slate-900 text-right">
+                            <td className="py-3.5 font-extrabold text-[#171725] text-right">
                               {formatRupiah(item.subtotalItem)}
                             </td>
                           </tr>
@@ -1036,16 +1041,16 @@ function OrderStatusContent() {
                     </table>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-200 space-y-2 text-xs">
-                    <div className="flex justify-between text-slate-600">
+                  <div className="pt-3 border-t border-[#E6E8F0] space-y-2 text-xs">
+                    <div className="flex justify-between text-[#5E5E6A]">
                       <span>Subtotal Barang</span>
-                      <span className="font-semibold text-slate-900">
+                      <span className="font-bold text-[#171725]">
                         {formatRupiah(subtotalBarang)}
                       </span>
                     </div>
-                    <div className="flex justify-between text-slate-600">
+                    <div className="flex justify-between text-[#5E5E6A]">
                       <span>Ongkir</span>
-                      <span className="font-semibold text-[#174634]">
+                      <span className="font-bold text-[#159A68]">
                         {!delivery
                           ? 'Belum ada pengiriman'
                           : isOngkirPendingAdmin
@@ -1055,9 +1060,9 @@ function OrderStatusContent() {
                               : formatRupiah(delivery.ongkir)}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center text-sm font-bold text-slate-900 pt-2 border-t border-slate-100">
+                    <div className="flex justify-between items-center text-sm font-extrabold text-[#171725] pt-2.5 border-t border-[#E6E8F0]">
                       <span>Total Keseluruhan</span>
-                      <span className="text-[#174634]">
+                      <span className="text-[#4737FF] text-base">
                         {isOngkirPendingAdmin
                           ? `${formatRupiah(subtotalBarang)} + Menunggu konfirmasi admin`
                           : formatRupiah(
@@ -1068,8 +1073,8 @@ function OrderStatusContent() {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-start gap-2.5 rounded-2xl bg-[#f7f6f2] p-4 text-xs text-slate-600">
-                  <Info className="w-4 h-4 text-[#174634] shrink-0 mt-0.5" />
+                <div className="flex items-start gap-2.5 rounded-2xl bg-[#E7EFFF] border border-[#D1CDFF] p-4 text-xs text-[#171725]">
+                  <Info className="w-4 h-4 text-[#4737FF] shrink-0 mt-0.5" />
                   <span>
                     Klik tombol <strong>Unduh Nota PDF</strong> di atas untuk
                     melihat rincian item pesanan resmi.
@@ -1091,7 +1096,7 @@ export default function OrderStatusDetailPage() {
         <div className="lezzat-shell">
           <ShopSidebar />
           <main className="lezzat-main">
-            <div className="bg-white rounded-3xl p-8 border border-slate-200 animate-pulse h-64" />
+            <div className="ff-card bg-white p-8 animate-pulse h-64" />
           </main>
         </div>
       }
