@@ -1,85 +1,84 @@
 @import "tailwindcss";
 
 :root {
-  --brand-green: #174634;
-  --brand-green-hover: #113527;
-  --brand-cream: #f7f6f2;
-  --brand-beige: #f2efe9;
-  --brand-coral: #e26d53;
+  --ff-primary: #4737FF;
+  --ff-primary-dark: #3529BF;
+  --ff-dark: #101018;
+  --ff-soft-purple: #ACA5FF;
+  --ff-accent-orange: #F75C03;
+  --ff-accent-orange-hover: #D94800;
+  --ff-bg-main: #F8FAFF;
+  --ff-bg-secondary: #F1F3F8;
+  --ff-surface: #FFFFFF;
+  --ff-text-primary: #171725;
+  --ff-text-secondary: #77788A;
+  --ff-border: #E6E8F0;
+  --ff-gradient-hero: linear-gradient(110deg, #101018 0%, #3529BF 40%, #4737FF 70%, #ACA5FF 100%);
 }
 
-@layer base {
-  body {
-    background-color: var(--brand-cream);
-    color: #1c2521;
-    font-family: var(--font-sans), sans-serif;
-    margin: 0;
-  }
-
-  h1, h2, .font-serif-title {
-    font-family: var(--font-serif), Georgia, serif;
-  }
+body {
+  background-color: var(--ff-bg-main);
+  color: var(--ff-text-primary);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow-x: hidden;
 }
 
-/* Pengunci struktur layout agar tidak pernah menumpuk di layar desktop */
+h1, h2, h3, h4, .font-heading, .font-serif-title {
+  font-family: var(--font-jakarta), sans-serif !important;
+  letter-spacing: -0.02em;
+}
+
 .lezzat-shell {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  background-color: #f7f6f2;
-}
-
-.lezzat-sidebar {
-  display: none;
-}
-
-.lezzat-main {
-  flex: 1 1 0%;
-  min-width: 0;
-  padding: 1.5rem 2rem;
-}
-
-.lezzat-cart {
-  width: 100%;
-  background-color: #ffffff;
-  border-top: 1px solid #e2e8f0;
-  padding: 1.5rem;
+  background-color: var(--ff-bg-main);
 }
 
 @media (min-width: 1024px) {
   .lezzat-shell {
     flex-direction: row;
-    align-items: flex-start;
-  }
-
-  .lezzat-sidebar {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    width: 16rem;
-    flex-shrink: 0;
-    background-color: #ffffff;
-    border-right: 1px solid #e2e8f0;
-    padding: 1.5rem;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    box-sizing: border-box;
   }
 }
 
-@media (min-width: 1280px) {
-  .lezzat-cart {
-    width: 21rem;
-    flex-shrink: 0;
-    border-top: none;
-    border-left: 1px solid #e2e8f0;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    box-sizing: border-box;
+.lezzat-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.5rem 1.25rem 3rem;
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (min-width: 640px) {
+  .lezzat-main {
+    padding: 2rem 2rem 3.5rem;
   }
 }
+
+.ff-hero-gradient {
+  background: var(--ff-gradient-hero);
+}
+
+.ff-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E6E8F0;
+  border-radius: 1.25rem;
+  box-shadow: 0 10px 30px -10px rgba(16, 16, 24, 0.05);
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.ff-card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 38px -12px rgba(71, 55, 255, 0.12);
+  border-color: #D1CDFF;
+}
+
+/* Otomatis ubah class warna hijau/krem lama ke tema Froznfood 2.0 */
+.bg-\[\#174634\] { background-color: #4737FF !important; }
+.hover\:bg-\[\#113527\]:hover { background-color: #3529BF !important; }
+.text-\[\#174634\] { color: #4737FF !important; }
+.border-\[\#174634\] { border-color: #4737FF !important; }
+.focus\:border-\[\#174634\]:focus { border-color: #4737FF !important; }
+.bg-\[\#f4f1ea\], .bg-\[\#f7f6f2\] { background-color: #F8FAFF !important; }
+.bg-\[\#f2efe9\] { background-color: #E7EFFF !important; }

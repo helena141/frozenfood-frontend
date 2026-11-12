@@ -74,6 +74,22 @@ function getDefaultFutureDate(daysAhead = 30): string {
   return d.toISOString().split('T')[0];
 }
 
+function toGramInput(rawBerat: number | undefined | null): number {
+  const val = Number(rawBerat || 0);
+  if (val <= 0) return 500;
+  return val <= 50 ? Math.round(val * 1000) : Math.round(val);
+}
+
+function toKgPayload(gramInput: number): number {
+  const val = Number(gramInput || 0);
+  return Number((val / 1000).toFixed(4));
+}
+
+function formatWeightDisplay(rawBerat: number | undefined | null): string {
+  const grams = toGramInput(rawBerat);
+  return `${grams.toLocaleString('id-ID')} g`;
+}
+
 export default function AdminProductsPage() {
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
@@ -83,7 +99,6 @@ export default function AdminProductsPage() {
     useState<ProductCatalogResponse | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
-  // State Manajemen Batch FEFO
   const [isBatchFormOpen, setIsBatchFormOpen] = useState<boolean>(false);
   const [editingBatch, setEditingBatch] =
     useState<ProductBatchResponse | null>(null);
@@ -142,7 +157,7 @@ export default function AdminProductsPage() {
       kategori: '',
       deskripsiProduk: '',
       hargaEceran: 0,
-      berat: 0,
+      berat: 500,
       volume: 0,
       gambar: '',
       isActive: true,
@@ -159,7 +174,7 @@ export default function AdminProductsPage() {
     defaultValues: {
       productId: '',
       stokAwal: 50,
-      tanggalExp: "",
+      tanggalExp: '',
       hargaOverride: '',
       diskon: '',
     },
@@ -205,7 +220,7 @@ export default function AdminProductsPage() {
       kategori: product.kategori || '',
       deskripsiProduk: product.deskripsiProduk || '',
       hargaEceran: product.hargaEceran,
-      berat: product.berat,
+      berat: toGramInput(product.berat),
       volume: product.volume ?? 0,
       gambar: product.gambar || '',
       isActive: product.isActive ?? true,
@@ -261,7 +276,6 @@ export default function AdminProductsPage() {
     setEditingBatch(null);
   };
 
-  // Submit Create (POST /api/products) atau Update (PUT /api/products/{id})
   const onSubmitForm = async (values: ProductFormValues) => {
     setActionError(null);
     setActionSuccess(null);
@@ -271,7 +285,7 @@ export default function AdminProductsPage() {
       kategori: values.kategori.trim(),
       deskripsiProduk: values.deskripsiProduk?.trim() || undefined,
       hargaEceran: Number(values.hargaEceran),
-      berat: Number(values.berat),
+      berat: toKgPayload(Number(values.berat)),
       volume:
         values.volume !== undefined && !Number.isNaN(Number(values.volume))
           ? Number(values.volume)
@@ -302,7 +316,6 @@ export default function AdminProductsPage() {
     }
   };
 
-  // Submit Tambah (POST /api/inventory/batches) atau Edit Batch FEFO (PUT /api/inventory/batches/{id})
   const onSubmitBatchForm = async (values: BatchFormValues) => {
     setActionError(null);
     setActionSuccess(null);
@@ -383,7 +396,6 @@ export default function AdminProductsPage() {
     }
   };
 
-  // Konfirmasi & Eksekusi Delete Batch (DELETE /api/inventory/batches/{id})
   const handleConfirmDeleteBatch = async () => {
     if (!deleteBatchTarget) return;
     setActionError(null);
@@ -409,7 +421,6 @@ export default function AdminProductsPage() {
     }
   };
 
-  // Konfirmasi & Eksekusi Delete (DELETE /api/products/{id})
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     setActionError(null);
@@ -441,14 +452,14 @@ export default function AdminProductsPage() {
       <AdminSidebar />
 
       <main className="lezzat-main">
-        {/* Header */}
+        {/* Page Header Froznfood 2.0 SaaS */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
           <div>
-            <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">
-              MANAJEMEN KATALOG & INVENTORI FEFO
+            <p className="text-[11px] font-extrabold tracking-[0.16em] text-[#4737FF] uppercase">
+              FROZNFOOD 2.0 • INVENTORY & CATALOG
             </p>
-            <h1 className="font-serif-title text-2xl sm:text-3xl font-bold text-slate-900">
-              Kelola Produk & Batch Stok
+            <h1 className="font-heading text-2xl sm:text-3xl font-extrabold text-[#171725] mt-1">
+              Kelola Produk & Batch Stok FEFO
             </h1>
           </div>
 
@@ -459,25 +470,25 @@ export default function AdminProductsPage() {
                 refetch();
                 refetchBatches();
               }}
-              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white border border-[#E6E8F0] hover:bg-[#F1F3F8] text-[#171725] text-xs font-semibold transition-colors cursor-pointer"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-3.5 h-3.5 text-[#5E5E6A]" />
               <span>Muat Ulang</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleOpenBatchForm()}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#F75C03] hover:bg-[#D94800] text-white text-xs font-bold shadow-sm shadow-[#F75C03]/25 transition-all cursor-pointer"
             >
               <Layers className="w-4 h-4" />
-              <span>+ Tambah Stok Batch FEFO</span>
+              <span>+ Tambah Batch FEFO</span>
             </button>
 
             <button
               type="button"
               onClick={handleOpenCreate}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#174634] hover:bg-[#113527] text-white text-xs font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4737FF] hover:bg-[#3529BF] text-white text-xs font-bold shadow-sm shadow-[#4737FF]/25 transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Tambah Produk Baru</span>
@@ -485,31 +496,32 @@ export default function AdminProductsPage() {
           </div>
         </div>
 
-        {/* Info Integrasi Produk & Batch FEFO */}
-        <div className="mb-6 flex items-start gap-2.5 rounded-2xl bg-[#f2efe9] border border-slate-200/80 p-3.5 text-xs text-slate-700">
-          <Info className="w-4 h-4 text-[#174634] shrink-0 mt-0.5" />
+        {/* Info Banner */}
+        <div className="mb-6 flex items-start gap-2.5 rounded-2xl bg-[#E7EFFF] border border-[#D1CDFF] p-3.5 text-xs text-[#171725]">
+          <Info className="w-4 h-4 text-[#4737FF] shrink-0 mt-0.5" />
           <span>
-            <strong>Integrasi Penuh Master Produk & FEFO:</strong> Pengelolaan
-            katalog terhubung ke <code>/api/products</code> dan manajemen stok
-            per batch tanggal kedaluwarsa (<em>First Expired, First Out</em>)
-            terhubung ke <code>/api/inventory/batches</code>.
+            <strong>Integrasi Master Produk & FEFO:</strong> Katalog terhubung ke{' '}
+            <code className="font-mono text-[#4737FF]">/api/products</code> dan
+            rotasi stok berdasarkan tanggal kedaluwarsa terdekat (
+            <em>First Expired, First Out</em>) terhubung ke{' '}
+            <code className="font-mono text-[#4737FF]">/api/inventory/batches</code>.
           </span>
         </div>
 
-        {/* Pesan Error / Sukses */}
+        {/* Alert Error / Sukses */}
         {actionError && (
           <div
             role="alert"
-            className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-700"
+            className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-[#E5484D]/30 bg-[#E5484D]/10 p-4 text-xs text-[#E5484D]"
           >
             <div className="flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{actionError}</span>
+              <span className="font-medium">{actionError}</span>
             </div>
             <button
               type="button"
               onClick={() => setActionError(null)}
-              className="text-red-500 hover:text-red-800 cursor-pointer"
+              className="text-[#E5484D] hover:opacity-75 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -519,33 +531,33 @@ export default function AdminProductsPage() {
         {actionSuccess && (
           <div
             role="status"
-            className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-[#174634]"
+            className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-[#159A68]/30 bg-[#159A68]/10 p-4 text-xs text-[#159A68]"
           >
             <div className="flex items-start gap-2.5">
               <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-              <span className="font-medium">{actionSuccess}</span>
+              <span className="font-semibold">{actionSuccess}</span>
             </div>
             <button
               type="button"
               onClick={() => setActionSuccess(null)}
-              className="text-emerald-700 hover:text-emerald-950 cursor-pointer"
+              className="text-[#159A68] hover:opacity-75 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        {/* Panel Form Tambah / Edit Stok Batch FEFO */}
+        {/* Form Tambah / Edit Batch FEFO */}
         {isBatchFormOpen && (
-          <section className="mb-6 bg-white rounded-3xl p-6 border-2 border-amber-600 shadow-sm">
-            <div className="flex items-center justify-between pb-4 mb-5 border-b border-slate-100">
+          <section className="mb-6 ff-card p-6 border-2 border-[#F75C03] bg-white">
+            <div className="flex items-center justify-between pb-4 mb-5 border-b border-[#E6E8F0]">
               <div>
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 className="font-heading text-base font-extrabold text-[#171725]">
                   {editingBatch
                     ? `Edit Batch FEFO: ${editingBatch.idProdBatch}`
                     : 'Tambah Stok Batch FEFO Baru'}
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[#77788A]">
                   {editingBatch ? (
                     <>
                       Perbarui stok fisik awal, sisa stok online, tanggal
@@ -567,7 +579,7 @@ export default function AdminProductsPage() {
               <button
                 type="button"
                 onClick={handleCloseBatchForm}
-                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                className="text-[#77788A] hover:text-[#171725] cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -584,13 +596,13 @@ export default function AdminProductsPage() {
                 } gap-4`}
               >
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                     Pilih Produk *
                   </label>
                   <select
                     {...registerBatch('productId')}
                     disabled={Boolean(editingBatch)}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 bg-white disabled:bg-slate-100 disabled:text-slate-500 focus:border-[#174634] focus:outline-none"
+                    className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] bg-white disabled:bg-[#F1F3F8] disabled:text-[#77788A] focus:border-[#4737FF] focus:outline-none"
                   >
                     <option value="">-- Pilih Produk --</option>
                     {products.map((p) => (
@@ -600,14 +612,14 @@ export default function AdminProductsPage() {
                     ))}
                   </select>
                   {batchErrors.productId && (
-                    <p className="mt-1 text-xs text-red-600">
+                    <p className="mt-1 text-xs text-[#E5484D]">
                       {batchErrors.productId.message}
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                     {editingBatch
                       ? 'Stok Awal (Unit) *'
                       : 'Jumlah Stok Masuk (Unit, ≥ 1) *'}
@@ -616,10 +628,10 @@ export default function AdminProductsPage() {
                     type="number"
                     min={editingBatch ? 0 : 1}
                     {...registerBatch('stokAwal')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                    className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                   />
                   {batchErrors.stokAwal && (
-                    <p className="mt-1 text-xs text-red-600">
+                    <p className="mt-1 text-xs text-[#E5484D]">
                       {batchErrors.stokAwal.message}
                     </p>
                   )}
@@ -627,17 +639,17 @@ export default function AdminProductsPage() {
 
                 {editingBatch && (
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                    <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                       Sisa Stok Online (Unit) *
                     </label>
                     <input
                       type="number"
                       min={0}
                       {...registerBatch('stokOnline')}
-                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                      className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                     />
                     {batchErrors.stokOnline && (
-                      <p className="mt-1 text-xs text-red-600">
+                      <p className="mt-1 text-xs text-[#E5484D]">
                         {batchErrors.stokOnline.message}
                       </p>
                     )}
@@ -645,17 +657,17 @@ export default function AdminProductsPage() {
                 )}
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                     Tanggal Kedaluwarsa *
                   </label>
                   <input
                     type="date"
                     min={editingBatch ? undefined : getDefaultFutureDate(1)}
                     {...registerBatch('tanggalExp')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                    className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                   />
                   {batchErrors.tanggalExp && (
-                    <p className="mt-1 text-xs text-red-600">
+                    <p className="mt-1 text-xs text-[#E5484D]">
                       {batchErrors.tanggalExp.message}
                     </p>
                   )}
@@ -664,7 +676,7 @@ export default function AdminProductsPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                     Harga Override Khusus Batch Ini (Rp, Opsional)
                   </label>
                   <input
@@ -672,12 +684,12 @@ export default function AdminProductsPage() {
                     step="any"
                     placeholder="Kosongkan jika menggunakan harga eceran produk"
                     {...registerBatch('hargaOverride')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                    className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                     Diskon Clearance Batch (%, Opsional)
                   </label>
                   <input
@@ -687,7 +699,7 @@ export default function AdminProductsPage() {
                     max={100}
                     placeholder="Contoh: 15 (untuk diskon 15%)"
                     {...registerBatch('diskon')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                    className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                   />
                 </div>
               </div>
@@ -696,14 +708,14 @@ export default function AdminProductsPage() {
                 <button
                   type="button"
                   onClick={handleCloseBatchForm}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-[#E6E8F0] bg-white hover:bg-[#F1F3F8] text-[#171725] text-xs font-semibold cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingBatch}
-                  className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-[#F75C03] hover:bg-[#D94800] disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
                 >
                   {isSubmittingBatch
                     ? 'Menyimpan Batch...'
@@ -716,17 +728,17 @@ export default function AdminProductsPage() {
           </section>
         )}
 
-        {/* Panel Form Create / Edit Produk */}
+        {/* Form Tambah / Edit Produk */}
         {isFormOpen && (
-          <section className="mb-6 bg-white rounded-3xl p-6 border-2 border-[#174634] shadow-sm">
-            <div className="flex items-center justify-between pb-4 mb-5 border-b border-slate-100">
+          <section className="mb-6 ff-card p-6 border-2 border-[#4737FF] bg-white">
+            <div className="flex items-center justify-between pb-4 mb-5 border-b border-[#E6E8F0]">
               <div>
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 className="font-heading text-base font-extrabold text-[#171725]">
                   {editingProduct
                     ? `Edit Produk: ${editingProduct.namaProduk}`
                     : 'Tambah Produk Baru'}
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[#77788A]">
                   Lengkapi spesifikasi produk frozen food sesuai kontrak DTO
                   backend
                 </p>
@@ -734,7 +746,7 @@ export default function AdminProductsPage() {
               <button
                 type="button"
                 onClick={handleCloseForm}
-                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                className="text-[#77788A] hover:text-[#171725] cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -747,34 +759,34 @@ export default function AdminProductsPage() {
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                     Nama Produk *
                   </label>
                   <input
                     type="text"
                     placeholder="Contoh: Nugget Ayam Crispy 500g"
                     {...register('namaProduk')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                    className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                   />
                   {errors.namaProduk && (
-                    <p className="mt-1 text-xs text-red-600">
+                    <p className="mt-1 text-xs text-[#E5484D]">
                       {errors.namaProduk.message}
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                     Kategori *
                   </label>
                   <input
                     type="text"
                     placeholder="Contoh: Olahan Ayam, Dimsum, Sosis..."
                     {...register('kategori')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                    className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                   />
                   {errors.kategori && (
-                    <p className="mt-1 text-xs text-red-600">
+                    <p className="mt-1 text-xs text-[#E5484D]">
                       {errors.kategori.message}
                     </p>
                   )}
@@ -783,51 +795,52 @@ export default function AdminProductsPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                     Harga Eceran (Rp, &gt; 0) *
                   </label>
                   <input
                     type="number"
                     step="any"
                     {...register('hargaEceran')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                    className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                   />
                   {errors.hargaEceran && (
-                    <p className="mt-1 text-xs text-red-600">
+                    <p className="mt-1 text-xs text-[#E5484D]">
                       {errors.hargaEceran.message}
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                     Berat (gram, &gt; 0) *
                   </label>
                   <input
                     type="number"
                     step="any"
+                    placeholder="Contoh: 500 (untuk 500g)"
                     {...register('berat')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                    className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                   />
                   {errors.berat && (
-                    <p className="mt-1 text-xs text-red-600">
+                    <p className="mt-1 text-xs text-[#E5484D]">
                       {errors.berat.message}
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                     Volume (ml/cm³, &ge; 0)
                   </label>
                   <input
                     type="number"
                     step="any"
                     {...register('volume')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                    className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                   />
                   {errors.volume && (
-                    <p className="mt-1 text-xs text-red-600">
+                    <p className="mt-1 text-xs text-[#E5484D]">
                       {errors.volume.message}
                     </p>
                   )}
@@ -836,23 +849,23 @@ export default function AdminProductsPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                     URL Gambar Produk (Opsional)
                   </label>
                   <input
                     type="url"
                     placeholder="https://images.unsplash.com/..."
                     {...register('gambar')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                    className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                   />
                 </div>
 
                 <div className="flex items-end pb-2">
-                  <label className="inline-flex items-center gap-2.5 text-xs font-semibold text-slate-800 cursor-pointer">
+                  <label className="inline-flex items-center gap-2.5 text-xs font-semibold text-[#171725] cursor-pointer">
                     <input
                       type="checkbox"
                       {...register('isActive')}
-                      className="w-4 h-4 rounded border-slate-300 text-[#174634] focus:ring-[#174634]"
+                      className="w-4 h-4 rounded accent-[#4737FF]"
                     />
                     <span>Produk Aktif (Ditampilkan di Katalog)</span>
                   </label>
@@ -860,14 +873,14 @@ export default function AdminProductsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                <label className="block text-xs font-semibold text-[#171725] mb-1.5">
                   Deskripsi Produk (Opsional)
                 </label>
                 <textarea
                   rows={2}
                   placeholder="Deskripsi singkat komposisi atau saran penyajian..."
                   {...register('deskripsiProduk')}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#174634] focus:outline-none"
+                  className="w-full rounded-xl border border-[#E6E8F0] px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none"
                 />
               </div>
 
@@ -875,14 +888,14 @@ export default function AdminProductsPage() {
                 <button
                   type="button"
                   onClick={handleCloseForm}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-[#E6E8F0] bg-white hover:bg-[#F1F3F8] text-[#171725] text-xs font-semibold cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2.5 rounded-xl bg-[#174634] hover:bg-[#113527] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-[#4737FF] hover:bg-[#3529BF] disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
                 >
                   {isSubmitting
                     ? 'Menyimpan...'
@@ -895,98 +908,90 @@ export default function AdminProductsPage() {
           </section>
         )}
 
-        {/* Tabel Daftar Produk */}
-        <section className="bg-white rounded-3xl p-6 border border-slate-200 mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-4 border-b border-slate-100">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#f2efe9] text-[#174634] flex items-center justify-center">
-                <Package className="w-4 h-4" />
+        {/* Tabel Daftar Katalog Produk */}
+        <section className="ff-card p-6 bg-white mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-4 border-b border-[#E6E8F0]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#E7EFFF] text-[#4737FF] flex items-center justify-center">
+                <Package className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-slate-900">
+                <h2 className="font-heading text-base font-extrabold text-[#171725]">
                   Daftar Katalog Produk
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[#77788A]">
                   Total {filteredProducts.length} produk ditampilkan
                 </p>
               </div>
             </div>
 
             <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#77788A] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="search"
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
                 placeholder="Cari kode, nama, atau kategori..."
-                className="w-full rounded-xl border border-slate-200 pl-10 pr-3.5 py-2 text-xs text-slate-900 focus:border-[#174634] focus:outline-none"
+                className="w-full rounded-xl border border-[#E6E8F0] bg-[#F8FAFF] focus:bg-white pl-10 pr-3.5 py-2 text-xs text-[#171725] focus:border-[#4737FF] focus:outline-none"
               />
             </div>
           </div>
 
-          {/* 1. LOADING */}
           {isLoading && (
             <div className="space-y-3 animate-pulse py-4">
               {[1, 2, 3, 4].map((n) => (
-                <div key={n} className="h-14 rounded-2xl bg-slate-100" />
+                <div key={n} className="h-14 rounded-2xl bg-[#F1F3F8]" />
               ))}
             </div>
           )}
 
-          {/* 2. ERROR */}
           {!isLoading && isError && (
-            <div className="rounded-2xl bg-red-50 border border-red-200 p-8 text-center my-4">
-              <AlertCircle className="w-8 h-8 text-red-600 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-900 mb-1">
+            <div className="rounded-2xl bg-[#E5484D]/10 border border-[#E5484D]/30 p-8 text-center my-4">
+              <AlertCircle className="w-8 h-8 text-[#E5484D] mx-auto mb-2" />
+              <p className="text-sm font-bold text-[#171725] mb-1">
                 Gagal Memuat Produk
               </p>
-              <p className="text-xs text-slate-600 mb-4">
+              <p className="text-xs text-[#5E5E6A] mb-4">
                 {getErrorMessage(error, 'Tidak dapat mengambil data produk.')}
               </p>
               <button
                 type="button"
                 onClick={() => refetch()}
-                className="px-4 py-2 rounded-xl bg-[#174634] text-white text-xs font-semibold cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-[#4737FF] text-white text-xs font-bold cursor-pointer"
               >
                 Coba Lagi
               </button>
             </div>
           )}
 
-          {/* 3. KOSONG */}
           {!isLoading && !isError && filteredProducts.length === 0 && (
-            <div className="rounded-2xl bg-[#f7f6f2] p-10 text-center my-2">
-              <Snowflake className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-800 mb-1">
+            <div className="rounded-2xl bg-[#F8FAFF] p-10 text-center my-2">
+              <Snowflake className="w-10 h-10 text-[#ACA5FF] mx-auto mb-2" />
+              <p className="text-sm font-bold text-[#171725] mb-1">
                 Produk tidak ditemukan
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[#77788A]">
                 Belum ada produk atau tidak ada yang cocok dengan kata kunci
                 pencarian.
               </p>
             </div>
           )}
 
-          {/* 4. TABEL DATA */}
           {!isLoading && !isError && filteredProducts.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-400">
-                    <th className="py-3 px-4 font-semibold">Produk</th>
-                    <th className="py-3 px-4 font-semibold">Kategori</th>
-                    <th className="py-3 px-4 font-semibold">Harga Eceran</th>
-                    <th className="py-3 px-4 font-semibold">
-                      Berat & Volume
-                    </th>
-                    <th className="py-3 px-4 font-semibold">Stok Online</th>
-                    <th className="py-3 px-4 font-semibold">Status</th>
-                    <th className="py-3 px-4 font-semibold text-right">
-                      Aksi
-                    </th>
+                  <tr className="border-b border-[#E6E8F0] text-[#77788A] uppercase tracking-wider text-[11px]">
+                    <th className="py-3.5 px-4 font-bold">Produk</th>
+                    <th className="py-3.5 px-4 font-bold">Kategori</th>
+                    <th className="py-3.5 px-4 font-bold">Harga Eceran</th>
+                    <th className="py-3.5 px-4 font-bold">Berat & Volume</th>
+                    <th className="py-3.5 px-4 font-bold">Stok Online</th>
+                    <th className="py-3.5 px-4 font-bold">Status</th>
+                    <th className="py-3.5 px-4 font-bold text-right">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-[#E6E8F0]">
                   {filteredProducts.map((product) => {
                     const stock = getProductStock(product);
                     const isActive = product.isActive ?? true;
@@ -994,11 +999,11 @@ export default function AdminProductsPage() {
                     return (
                       <tr
                         key={product.idProduk}
-                        className="hover:bg-slate-50/80 transition-colors"
+                        className="hover:bg-[#F8FAFF] transition-colors"
                       >
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-[#f2efe9] overflow-hidden shrink-0 flex items-center justify-center text-[#174634]">
+                            <div className="w-11 h-11 rounded-xl bg-[#E7EFFF] overflow-hidden shrink-0 flex items-center justify-center text-[#4737FF]">
                               {product.gambar ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
@@ -1007,20 +1012,20 @@ export default function AdminProductsPage() {
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
-                                <Snowflake className="w-4 h-4 opacity-50" />
+                                <Snowflake className="w-4 h-4 opacity-60" />
                               )}
                             </div>
                             <div>
                               <div className="flex items-center gap-1.5">
-                                <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                                <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#F1F3F8] text-[#5E5E6A]">
                                   {product.idProduk}
                                 </span>
-                                <p className="font-bold text-slate-900">
+                                <p className="font-bold text-[#171725]">
                                   {product.namaProduk}
                                 </p>
                               </div>
                               {product.deskripsiProduk && (
-                                <p className="text-[11px] text-slate-400 line-clamp-1 max-w-xs mt-0.5">
+                                <p className="text-[11px] text-[#77788A] line-clamp-1 max-w-xs mt-0.5">
                                   {product.deskripsiProduk}
                                 </p>
                               )}
@@ -1029,24 +1034,24 @@ export default function AdminProductsPage() {
                         </td>
 
                         <td className="py-3.5 px-4">
-                          <span className="px-2.5 py-1 rounded-full bg-[#f2efe9] text-slate-800 text-[11px] font-semibold">
+                          <span className="px-2.5 py-1 rounded-lg bg-[#E7EFFF] text-[#4737FF] text-[11px] font-bold">
                             {product.kategori}
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4 font-bold text-[#174634]">
+                        <td className="py-3.5 px-4 font-extrabold text-[#4737FF]">
                           {formatRupiah(product.hargaEceran)}
                         </td>
 
-                        <td className="py-3.5 px-4 text-slate-600">
-                          {product.berat} g
+                        <td className="py-3.5 px-4 text-[#5E5E6A] font-medium">
+                          {formatWeightDisplay(product.berat)}
                           {product.volume ? ` • ${product.volume} ml` : ''}
                         </td>
 
                         <td className="py-3.5 px-4">
                           <span
                             className={`font-bold ${
-                              stock > 0 ? 'text-slate-900' : 'text-red-600'
+                              stock > 0 ? 'text-[#159A68]' : 'text-[#E5484D]'
                             }`}
                           >
                             {stock} unit
@@ -1055,10 +1060,10 @@ export default function AdminProductsPage() {
 
                         <td className="py-3.5 px-4">
                           <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
                               isActive
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-slate-200 text-slate-600'
+                                ? 'bg-[#159A68]/15 text-[#159A68]'
+                                : 'bg-[#F1F3F8] text-[#77788A]'
                             }`}
                           >
                             {isActive ? 'Aktif' : 'Nonaktif'}
@@ -1072,7 +1077,7 @@ export default function AdminProductsPage() {
                               onClick={() =>
                                 handleOpenBatchForm(product.idProduk)
                               }
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-semibold cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-[#F75C03]/30 bg-[#F75C03]/10 hover:bg-[#F75C03]/20 text-[#F75C03] text-[11px] font-bold cursor-pointer"
                             >
                               <Plus className="w-3 h-3" />
                               <span>Batch</span>
@@ -1080,7 +1085,7 @@ export default function AdminProductsPage() {
                             <button
                               type="button"
                               onClick={() => handleOpenEdit(product)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-semibold cursor-pointer"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-[#E6E8F0] bg-white hover:border-[#4737FF] text-[#171725] text-[11px] font-semibold cursor-pointer"
                             >
                               <Pencil className="w-3 h-3" />
                               <span>Edit</span>
@@ -1088,7 +1093,7 @@ export default function AdminProductsPage() {
                             <button
                               type="button"
                               onClick={() => setDeleteTarget(product)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-[11px] font-semibold cursor-pointer"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-[#E5484D]/30 bg-[#E5484D]/10 hover:bg-[#E5484D]/20 text-[#E5484D] text-[11px] font-semibold cursor-pointer"
                             >
                               <Trash2 className="w-3 h-3" />
                               <span>Hapus</span>
@@ -1105,17 +1110,17 @@ export default function AdminProductsPage() {
         </section>
 
         {/* Tabel Daftar Batch Inventori FEFO */}
-        <section className="bg-white rounded-3xl p-6 border border-slate-200">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-4 border-b border-slate-100">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
-                <Layers className="w-4 h-4" />
+        <section className="ff-card p-6 bg-white">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-4 border-b border-[#E6E8F0]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#F75C03]/15 text-[#F75C03] flex items-center justify-center">
+                <Layers className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-slate-900">
+                <h2 className="font-heading text-base font-extrabold text-[#171725]">
                   Daftar Batch Inventori FEFO (First Expired, First Out)
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[#77788A]">
                   Diurutkan otomatis berdasarkan tanggal kedaluwarsa terdekat (
                   <code>GET /api/inventory/batches</code>)
                 </p>
@@ -1127,7 +1132,7 @@ export default function AdminProductsPage() {
                 value={selectedBatchFilterProduct}
                 onChange={(e) => setSelectedBatchFilterProduct(e.target.value)}
                 aria-label="Filter batch berdasarkan produk"
-                className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs text-slate-900 bg-white focus:border-[#174634] focus:outline-none"
+                className="rounded-xl border border-[#E6E8F0] px-3.5 py-2 text-xs text-[#171725] bg-[#F8FAFF] focus:bg-white focus:border-[#4737FF] focus:outline-none"
               >
                 <option value="">Semua Produk ({batches.length} batch)</option>
                 {products.map((p) => (
@@ -1142,17 +1147,17 @@ export default function AdminProductsPage() {
           {isLoadingBatches && (
             <div className="space-y-3 animate-pulse py-4">
               {[1, 2, 3].map((n) => (
-                <div key={n} className="h-12 rounded-2xl bg-slate-100" />
+                <div key={n} className="h-12 rounded-2xl bg-[#F1F3F8]" />
               ))}
             </div>
           )}
 
           {!isLoadingBatches && isErrorBatches && (
-            <div className="rounded-2xl bg-red-50 border border-red-200 p-6 text-center my-2">
-              <p className="text-xs font-bold text-red-700 mb-1">
+            <div className="rounded-2xl bg-[#E5484D]/10 border border-[#E5484D]/30 p-6 text-center my-2">
+              <p className="text-xs font-bold text-[#E5484D] mb-1">
                 Gagal memuat data batch FEFO
               </p>
-              <p className="text-xs text-red-600">
+              <p className="text-xs text-[#5E5E6A]">
                 {getErrorMessage(
                   errorBatches,
                   'Tidak dapat mengambil daftar batch dari server.'
@@ -1162,12 +1167,12 @@ export default function AdminProductsPage() {
           )}
 
           {!isLoadingBatches && !isErrorBatches && batches.length === 0 && (
-            <div className="rounded-2xl bg-[#f7f6f2] p-8 text-center my-2">
-              <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-800 mb-1">
+            <div className="rounded-2xl bg-[#F8FAFF] p-8 text-center my-2">
+              <Calendar className="w-8 h-8 text-[#ACA5FF] mx-auto mb-2" />
+              <p className="text-sm font-bold text-[#171725] mb-1">
                 Belum Ada Batch Stok FEFO
               </p>
-              <p className="text-xs text-slate-500 mb-4">
+              <p className="text-xs text-[#77788A] mb-4">
                 Tambahkan batch stok baru agar produk memiliki stok online dan
                 dapat dipesan oleh pelanggan.
               </p>
@@ -1176,7 +1181,7 @@ export default function AdminProductsPage() {
                 onClick={() =>
                   handleOpenBatchForm(selectedBatchFilterProduct || undefined)
                 }
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F75C03] text-white text-xs font-bold hover:bg-[#D94800] cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Tambah Batch Pertama</span>
@@ -1188,23 +1193,23 @@ export default function AdminProductsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-400">
-                    <th className="py-3 px-4 font-semibold">Kode Batch</th>
-                    <th className="py-3 px-4 font-semibold">Produk</th>
-                    <th className="py-3 px-4 font-semibold">Stok Awal</th>
-                    <th className="py-3 px-4 font-semibold">Sisa Stok Online</th>
-                    <th className="py-3 px-4 font-semibold">
+                  <tr className="border-b border-[#E6E8F0] text-[#77788A] uppercase tracking-wider text-[11px]">
+                    <th className="py-3.5 px-4 font-bold">Kode Batch</th>
+                    <th className="py-3.5 px-4 font-bold">Produk</th>
+                    <th className="py-3.5 px-4 font-bold">Stok Awal</th>
+                    <th className="py-3.5 px-4 font-bold">Sisa Stok Online</th>
+                    <th className="py-3.5 px-4 font-bold">
                       Tanggal Kedaluwarsa
                     </th>
-                    <th className="py-3 px-4 font-semibold">
+                    <th className="py-3.5 px-4 font-bold">
                       Harga Khusus / Diskon
                     </th>
-                    <th className="py-3 px-4 font-semibold text-right">
+                    <th className="py-3.5 px-4 font-bold text-right">
                       Aksi Batch
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-[#E6E8F0]">
                   {batches.map((b) => {
                     const expDate = new Date(b.tanggalExp);
                     const now = new Date();
@@ -1218,28 +1223,28 @@ export default function AdminProductsPage() {
                     return (
                       <tr
                         key={b.idProdBatch}
-                        className="hover:bg-slate-50/80 transition-colors"
+                        className="hover:bg-[#F8FAFF] transition-colors"
                       >
-                        <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
+                        <td className="py-3.5 px-4 font-mono font-bold text-[#171725]">
                           {b.idProdBatch}
                         </td>
                         <td className="py-3.5 px-4">
-                          <span className="font-semibold text-slate-900">
+                          <span className="font-bold text-[#171725]">
                             {b.namaProduk}
                           </span>
-                          <span className="ml-1.5 font-mono text-[10px] text-slate-400">
+                          <span className="ml-1.5 font-mono text-[10px] text-[#77788A]">
                             ({b.productId})
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-slate-600">
+                        <td className="py-3.5 px-4 text-[#5E5E6A]">
                           {b.stokAwal} unit
                         </td>
                         <td className="py-3.5 px-4">
                           <span
                             className={`font-bold ${
                               b.stokOnline > 0
-                                ? 'text-[#174634]'
-                                : 'text-red-600'
+                                ? 'text-[#159A68]'
+                                : 'text-[#E5484D]'
                             }`}
                           >
                             {b.stokOnline} unit
@@ -1247,34 +1252,34 @@ export default function AdminProductsPage() {
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-slate-800">
+                            <span className="font-semibold text-[#171725]">
                               {b.tanggalExp}
                             </span>
                             {isExpired ? (
-                              <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">
+                              <span className="px-2 py-0.5 rounded-full bg-[#E5484D]/15 text-[#E5484D] text-[10px] font-extrabold">
                                 Kedaluwarsa
                               </span>
                             ) : isNearExpiry ? (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
-                                {diffDays} hari lagi
+                              <span className="px-2 py-0.5 rounded-full bg-[#D97706]/15 text-[#D97706] text-[10px] font-extrabold">
+                                Prioritas FEFO ({diffDays} hr)
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                              <span className="px-2 py-0.5 rounded-full bg-[#159A68]/15 text-[#159A68] text-[10px] font-extrabold">
                                 Aman ({diffDays} hr)
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 text-slate-600">
+                        <td className="py-3.5 px-4 text-[#5E5E6A]">
                           {b.hargaOverride ? (
-                            <span className="font-semibold text-slate-900">
+                            <span className="font-bold text-[#4737FF]">
                               {formatRupiah(b.hargaOverride)}
                             </span>
                           ) : (
-                            <span className="text-slate-400">Harga Normal</span>
+                            <span className="text-[#77788A]">Harga Normal</span>
                           )}
                           {b.diskon ? (
-                            <span className="ml-2 px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">
+                            <span className="ml-2 px-2 py-0.5 rounded-full bg-[#F75C03]/15 text-[#F75C03] text-[10px] font-extrabold">
                               Diskon {b.diskon}%
                             </span>
                           ) : null}
@@ -1284,7 +1289,7 @@ export default function AdminProductsPage() {
                             <button
                               type="button"
                               onClick={() => handleOpenEditBatch(b)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-semibold cursor-pointer"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-[#E6E8F0] bg-white hover:border-[#4737FF] text-[#171725] text-[11px] font-semibold cursor-pointer"
                             >
                               <Pencil className="w-3 h-3" />
                               <span>Edit</span>
@@ -1292,7 +1297,7 @@ export default function AdminProductsPage() {
                             <button
                               type="button"
                               onClick={() => setDeleteBatchTarget(b)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-[11px] font-semibold cursor-pointer"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-[#E5484D]/30 bg-[#E5484D]/10 hover:bg-[#E5484D]/20 text-[#E5484D] text-[11px] font-semibold cursor-pointer"
                             >
                               <Trash2 className="w-3 h-3" />
                               <span>Hapus</span>
@@ -1308,23 +1313,23 @@ export default function AdminProductsPage() {
           )}
         </section>
 
-        {/* Dialog Konfirmasi Hapus Batch */}
+        {/* Modal Konfirmasi Hapus Batch */}
         {deleteBatchTarget && (
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#101018]/60 backdrop-blur-xs p-4"
           >
-            <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-xl space-y-4">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-[#E6E8F0] shadow-xl space-y-4">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-[#E5484D]/10 text-[#E5484D] flex items-center justify-center shrink-0">
                   <AlertTriangle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">
+                  <h3 className="font-heading text-base font-extrabold text-[#171725]">
                     Hapus batch &ldquo;{deleteBatchTarget.idProdBatch}&rdquo;?
                   </h3>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-[#77788A] mt-1">
                     Produk: <strong>{deleteBatchTarget.namaProduk}</strong> (Sisa
                     stok online: {deleteBatchTarget.stokOnline} unit). Batch ini
                     akan dihapus dari inventori aktif FEFO.
@@ -1337,7 +1342,7 @@ export default function AdminProductsPage() {
                   type="button"
                   disabled={isDeletingBatch}
                   onClick={() => setDeleteBatchTarget(null)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-[#E6E8F0] bg-white hover:bg-[#F1F3F8] text-[#171725] text-xs font-semibold cursor-pointer"
                 >
                   Batal
                 </button>
@@ -1345,7 +1350,7 @@ export default function AdminProductsPage() {
                   type="button"
                   disabled={isDeletingBatch}
                   onClick={handleConfirmDeleteBatch}
-                  className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-[#E5484D] hover:opacity-90 disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
                 >
                   {isDeletingBatch ? 'Menghapus...' : 'Ya, hapus batch'}
                 </button>
@@ -1354,23 +1359,23 @@ export default function AdminProductsPage() {
           </div>
         )}
 
-        {/* Dialog Konfirmasi Hapus Produk */}
+        {/* Modal Konfirmasi Hapus Produk */}
         {deleteTarget && (
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#101018]/60 backdrop-blur-xs p-4"
           >
-            <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-xl space-y-4">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-[#E6E8F0] shadow-xl space-y-4">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-[#E5484D]/10 text-[#E5484D] flex items-center justify-center shrink-0">
                   <AlertTriangle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">
+                  <h3 className="font-heading text-base font-extrabold text-[#171725]">
                     Hapus produk &ldquo;{deleteTarget.namaProduk}&rdquo;?
                   </h3>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-[#77788A] mt-1">
                     Tindakan ini akan memanggil{' '}
                     <code>DELETE /api/products/&#123;id&#125;</code> secara
                     permanen.
@@ -1383,7 +1388,7 @@ export default function AdminProductsPage() {
                   type="button"
                   disabled={isDeleting}
                   onClick={() => setDeleteTarget(null)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-[#E6E8F0] bg-white hover:bg-[#F1F3F8] text-[#171725] text-xs font-semibold cursor-pointer"
                 >
                   Batal
                 </button>
@@ -1391,7 +1396,7 @@ export default function AdminProductsPage() {
                   type="button"
                   disabled={isDeleting}
                   onClick={handleConfirmDelete}
-                  className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-[#E5484D] hover:opacity-90 disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
                 >
                   {isDeleting ? 'Menghapus...' : 'Ya, hapus produk'}
                 </button>

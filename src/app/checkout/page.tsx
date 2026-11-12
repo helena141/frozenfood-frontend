@@ -88,7 +88,6 @@ const checkoutSchema = z.object({
 
 type CheckoutFormValues = z.infer<typeof checkoutSchema>;
 
-// Helper untuk mengambil elemen pertama dari respons GET /api/payments/order/{idOrder} yang berupa Array
 function extractFirstPayment(raw: unknown): PaymentResponse | null {
   if (!raw) return null;
   const item = Array.isArray(raw) ? raw[0] : raw;
@@ -114,7 +113,6 @@ export default function CheckoutPage() {
   const [infoNotice, setInfoNotice] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState(false);
 
-  // Menyimpan pesanan yang sudah dibuat agar jika langkah berikutnya gagal, retry tidak membuat pesanan yatim baru
   const [pendingOrder, setPendingOrder] = useState<OrderResponse | null>(null);
 
   const subtotal = getSubtotal();
@@ -180,7 +178,6 @@ export default function CheckoutPage() {
     );
   };
 
-  // Langkah 1: Pratinjau Estimasi Pengiriman (POST /api/deliveries/estimate tanpa idOrder)
   const handleCalculateEstimate = async () => {
     setEstimateError(null);
     setSubmitError(null);
@@ -225,7 +222,6 @@ export default function CheckoutPage() {
     }
   };
 
-  // Helper Idempoten untuk Pengiriman: Cek GET dulu, jika 404 baru POST, jika 409 ambil GET
   const ensureDeliveryCreated = async (
     idOrder: string,
     values: CheckoutFormValues
@@ -262,7 +258,6 @@ export default function CheckoutPage() {
     }
   };
 
-  // Helper Idempoten untuk Pembayaran: GET /api/payments/order/{idOrder} mengembalikan ARRAY (200 dengan [] jika belum ada)
   const ensurePaymentCreated = async (
     idOrder: string,
     metodePay: string
@@ -301,7 +296,6 @@ export default function CheckoutPage() {
     }
   };
 
-  // Langkah 2: Eksekusi Checkout sesuai aturan MOTOR_TOKO vs PIHAK_KETIGA
   const onSubmit = async (values: CheckoutFormValues) => {
     setSubmitError(null);
     setInfoNotice(null);
@@ -328,7 +322,6 @@ export default function CheckoutPage() {
     let activeOrder = pendingOrder;
 
     try {
-      // 1. Buat Order hanya jika belum ada pendingOrder dari percobaan sebelumnya
       if (!activeOrder) {
         const mappedItems = items.map((i) => ({
           idProduk: i.product.idProduk,
@@ -357,7 +350,6 @@ export default function CheckoutPage() {
         }
       }
 
-      // 2. Buat / Pastikan Pengiriman
       const deliveryData = await ensureDeliveryCreated(
         activeOrder.idOrder,
         values
@@ -367,7 +359,6 @@ export default function CheckoutPage() {
         deliveryData.pelaksana === 'PIHAK_KETIGA' ||
         deliveryData.statusDelivery === 'MENUNGGU_KONFIRMASI_ADMIN';
 
-      // 3. Jika PIHAK_KETIGA (MENUNGGU_KONFIRMASI_ADMIN): JANGAN panggil POST /api/payments
       if (isThirdPartyPending) {
         if (typeof window !== 'undefined') {
           sessionStorage.setItem(
@@ -390,7 +381,6 @@ export default function CheckoutPage() {
         return;
       }
 
-      // 4. Jika MOTOR_TOKO: Lanjutkan panggil POST /api/payments (Backend menghitung Payment.jumlah = barang + ongkir)
       const paymentData = await ensurePaymentCreated(
         activeOrder.idOrder,
         values.metodePay
@@ -432,10 +422,10 @@ export default function CheckoutPage() {
       <ShopSidebar />
 
       <main className="lezzat-main">
-        <div className="mb-6">
+        <div className="mb-5">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-[#174634]"
+            className="inline-flex items-center gap-2 text-xs font-bold text-[#5E5E6A] hover:text-[#4737FF] transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Kembali ke Katalog</span>
@@ -443,29 +433,29 @@ export default function CheckoutPage() {
         </div>
 
         <div className="mb-6">
-          <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">
+          <p className="text-[11px] font-extrabold tracking-[0.16em] text-[#4737FF] uppercase">
             {user?.tipeAkun === 'B2B'
-              ? 'CHECKOUT PESANAN GROSIR MITRA (B2B AUTO-TIERING & FEFO)'
-              : 'CHECKOUT PESANAN ECERAN (B2C)'}
+              ? 'FROZNFOOD 2.0 • CHECKOUT GROSIR MITRA (B2B AUTO-TIERING & FEFO)'
+              : 'FROZNFOOD 2.0 • CHECKOUT PESANAN ECERAN (B2C)'}
           </p>
-          <h1 className="font-serif-title text-2xl sm:text-3xl font-bold text-slate-900">
+          <h1 className="font-heading text-2xl sm:text-3xl font-extrabold text-[#171725] mt-1">
             Pengiriman & Pembayaran
           </h1>
         </div>
 
         {items.length === 0 && !pendingOrder && !infoNotice ? (
-          <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center max-w-lg mx-auto my-8">
-            <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h2 className="font-serif-title text-xl font-bold text-slate-900 mb-1">
+          <div className="ff-card bg-white p-8 text-center max-w-lg mx-auto my-8">
+            <ShoppingBag className="w-12 h-12 text-[#ACA5FF] mx-auto mb-3" />
+            <h2 className="font-heading text-xl font-extrabold text-[#171725] mb-1">
               Keranjang Belanja Kosong
             </h2>
-            <p className="text-xs text-slate-500 mb-6">
+            <p className="text-xs text-[#77788A] mb-6">
               Tambahkan produk frozen food pilihanmu terlebih dahulu sebelum
               melakukan checkout.
             </p>
             <Link
               href="/"
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-[#174634] text-white text-xs font-semibold hover:bg-[#113527]"
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#F75C03] hover:bg-[#D94800] text-white text-xs font-bold shadow-sm shadow-[#F75C03]/25 transition-all"
             >
               <span>Mulai Belanja</span>
               <ArrowRight className="w-4 h-4" />
@@ -479,13 +469,13 @@ export default function CheckoutPage() {
           >
             <div className="xl:col-span-2 space-y-6">
               {/* Kartu Informasi Aturan Pengiriman Rantai Dingin */}
-              <div className="rounded-3xl bg-[#174634] text-white p-6">
-                <div className="flex items-center gap-2 text-emerald-200 text-xs font-bold uppercase tracking-wider mb-3">
+              <div className="rounded-3xl ff-hero-gradient text-white p-6 shadow-md shadow-[#4737FF]/15">
+                <div className="flex items-center gap-2 text-[#FFB36B] text-xs font-extrabold uppercase tracking-wider mb-3">
                   <Snowflake className="w-4 h-4" />
                   <span>Ketentuan Pengiriman Rantai Dingin (Cold Chain)</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-emerald-50/90 leading-relaxed">
-                  <div className="bg-white/10 rounded-2xl p-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-white/90 leading-relaxed">
+                  <div className="bg-white/10 border border-white/15 backdrop-blur-xs rounded-2xl p-3.5">
                     <p className="font-bold text-white mb-1">
                       Jangkauan & Armada Kurir
                     </p>
@@ -496,7 +486,7 @@ export default function CheckoutPage() {
                       (ongkir menunggu konfirmasi admin).
                     </p>
                   </div>
-                  <div className="bg-white/10 rounded-2xl p-3.5">
+                  <div className="bg-white/10 border border-white/15 backdrop-blur-xs rounded-2xl p-3.5">
                     <p className="font-bold text-white mb-1">
                       Tarif Ongkir Online & Jam Operasional
                     </p>
@@ -513,17 +503,17 @@ export default function CheckoutPage() {
               </div>
 
               {/* Bagian 1: Lokasi & Koordinat Pengiriman */}
-              <div className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-[#f2efe9] text-[#174634] flex items-center justify-center">
+              <div className="ff-card bg-white p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#E6E8F0]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-[#E7EFFF] text-[#4737FF] flex items-center justify-center">
                       <MapPin className="w-4 h-4" />
                     </div>
                     <div>
-                      <h2 className="text-sm font-bold text-slate-900">
+                      <h2 className="font-heading text-sm font-extrabold text-[#171725]">
                         1. Lokasi Tujuan Pengiriman
                       </h2>
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-[11px] text-[#77788A]">
                         Alamat diketik sebagai teks, sedangkan perhitungan jarak
                         sistem mengacu pada titik koordinat
                       </p>
@@ -534,7 +524,7 @@ export default function CheckoutPage() {
                     type="button"
                     onClick={handleUseCurrentLocation}
                     disabled={isLocating || Boolean(pendingOrder)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#f2efe9] hover:bg-slate-200/70 disabled:opacity-50 text-[#174634] text-xs font-semibold transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#E7EFFF] hover:bg-[#D1CDFF] disabled:opacity-50 text-[#4737FF] text-xs font-bold transition-colors cursor-pointer"
                   >
                     <Navigation className="w-3.5 h-3.5" />
                     <span>
@@ -544,9 +534,9 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Tombol Preset Lokasi Contoh */}
-                <div className="rounded-2xl bg-[#f7f6f2] p-3.5 border border-slate-200/80">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-2">
-                    <Sparkles className="w-3.5 h-3.5 text-[#174634]" />
+                <div className="rounded-2xl bg-[#F8FAFF] p-3.5 border border-[#E6E8F0]">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#171725] mb-2">
+                    <Sparkles className="w-3.5 h-3.5 text-[#F75C03]" />
                     <span>
                       Pilih Cepat Titik Koordinat Contoh (Uji Estimasi Backend):
                     </span>
@@ -558,12 +548,12 @@ export default function CheckoutPage() {
                         type="button"
                         disabled={Boolean(pendingOrder)}
                         onClick={() => handleSelectDemoLocation(preset)}
-                        className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-[#174634] disabled:opacity-50 text-left transition-colors cursor-pointer"
+                        className="p-2.5 rounded-xl bg-white border border-[#E6E8F0] hover:border-[#4737FF] disabled:opacity-50 text-left transition-colors cursor-pointer"
                       >
-                        <p className="text-xs font-bold text-slate-800 leading-snug">
+                        <p className="text-xs font-bold text-[#171725] leading-snug">
                           {preset.label}
                         </p>
-                        <p className="text-[10px] font-mono text-slate-500 mt-1">
+                        <p className="text-[10px] font-mono text-[#77788A] mt-1">
                           {preset.lat}, {preset.lng}
                         </p>
                       </button>
@@ -574,7 +564,7 @@ export default function CheckoutPage() {
                 <div>
                   <label
                     htmlFor="alamatTujuan"
-                    className="block text-xs font-medium text-slate-700 mb-1.5"
+                    className="block text-xs font-semibold text-[#171725] mb-1.5"
                   >
                     Alamat Lengkap Tujuan (Teks Catatan Kurir)
                   </label>
@@ -584,10 +574,10 @@ export default function CheckoutPage() {
                     disabled={Boolean(pendingOrder)}
                     placeholder="Contoh: Jl. Melati No. 12, RT 04/RW 02, Patokan pagar hitam..."
                     {...register('alamatTujuan')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-[#174634] focus:outline-none disabled:bg-slate-100"
+                    className="w-full rounded-xl border border-[#E6E8F0] bg-[#F8FAFF] focus:bg-white px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none disabled:bg-[#F1F3F8] transition-colors"
                   />
                   {errors.alamatTujuan && (
-                    <p className="mt-1 text-xs text-red-600">
+                    <p className="mt-1 text-xs text-[#E5484D]">
                       {errors.alamatTujuan.message}
                     </p>
                   )}
@@ -597,7 +587,7 @@ export default function CheckoutPage() {
                   <div>
                     <label
                       htmlFor="latitudeTujuan"
-                      className="block text-xs font-medium text-slate-700 mb-1.5"
+                      className="block text-xs font-semibold text-[#171725] mb-1.5"
                     >
                       Latitude Tujuan
                     </label>
@@ -609,10 +599,10 @@ export default function CheckoutPage() {
                       {...register('latitudeTujuan', {
                         onChange: () => setEstimate(null),
                       })}
-                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-[#174634] focus:outline-none disabled:bg-slate-100"
+                      className="w-full rounded-xl border border-[#E6E8F0] bg-[#F8FAFF] focus:bg-white px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none disabled:bg-[#F1F3F8] transition-colors"
                     />
                     {errors.latitudeTujuan && (
-                      <p className="mt-1 text-xs text-red-600">
+                      <p className="mt-1 text-xs text-[#E5484D]">
                         {errors.latitudeTujuan.message}
                       </p>
                     )}
@@ -621,7 +611,7 @@ export default function CheckoutPage() {
                   <div>
                     <label
                       htmlFor="longitudeTujuan"
-                      className="block text-xs font-medium text-slate-700 mb-1.5"
+                      className="block text-xs font-semibold text-[#171725] mb-1.5"
                     >
                       Longitude Tujuan
                     </label>
@@ -633,10 +623,10 @@ export default function CheckoutPage() {
                       {...register('longitudeTujuan', {
                         onChange: () => setEstimate(null),
                       })}
-                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-[#174634] focus:outline-none disabled:bg-slate-100"
+                      className="w-full rounded-xl border border-[#E6E8F0] bg-[#F8FAFF] focus:bg-white px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none disabled:bg-[#F1F3F8] transition-colors"
                     />
                     {errors.longitudeTujuan && (
-                      <p className="mt-1 text-xs text-red-600">
+                      <p className="mt-1 text-xs text-[#E5484D]">
                         {errors.longitudeTujuan.message}
                       </p>
                     )}
@@ -647,7 +637,7 @@ export default function CheckoutPage() {
                   type="button"
                   onClick={handleCalculateEstimate}
                   disabled={isEstimating || Boolean(pendingOrder)}
-                  className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-[#174634] hover:bg-[#113527] disabled:opacity-60 text-white text-xs font-semibold transition-colors cursor-pointer"
+                  className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-[#4737FF] hover:bg-[#3529BF] disabled:opacity-60 text-white text-xs font-bold shadow-sm shadow-[#4737FF]/25 transition-all cursor-pointer"
                 >
                   <Calculator className="w-4 h-4" />
                   <span>
@@ -660,21 +650,27 @@ export default function CheckoutPage() {
                 {estimateError && (
                   <div
                     role="alert"
-                    className="flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-700"
+                    className="flex items-start gap-2.5 rounded-2xl border border-[#E5484D]/30 bg-[#E5484D]/10 p-4 text-xs text-[#E5484D]"
                   >
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>{estimateError}</span>
+                    <span className="font-medium">{estimateError}</span>
                   </div>
                 )}
 
                 {estimate && (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+                  <div className="rounded-2xl border border-[#D1CDFF] bg-[#F8FAFF] p-4 space-y-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#174634]">
-                        <CheckCircle2 className="w-4 h-4" />
+                      <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#4737FF]">
+                        <CheckCircle2 className="w-4 h-4 text-[#159A68]" />
                         Hasil Keputusan Pintar (Smart Delivery)
                       </span>
-                      <span className="px-2.5 py-1 rounded-full bg-[#174634] text-white text-[10px] font-bold uppercase">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                          estimate.pelaksana === 'MOTOR_TOKO'
+                            ? 'bg-[#4737FF] text-white'
+                            : 'bg-[#F75C03] text-white'
+                        }`}
+                      >
                         {estimate.pelaksana === 'MOTOR_TOKO'
                           ? 'MOTOR_TOKO (Kurir Toko)'
                           : 'PIHAK_KETIGA (Ekspedisi Mitra)'}
@@ -682,42 +678,42 @@ export default function CheckoutPage() {
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                      <div className="bg-white rounded-xl p-3 border border-emerald-100">
-                        <span className="text-slate-400 block text-[10px]">
+                      <div className="bg-white rounded-xl p-3 border border-[#E6E8F0]">
+                        <span className="text-[#77788A] block text-[10px]">
                           Jarak Tempuh
                         </span>
-                        <span className="font-bold text-slate-900">
+                        <span className="font-bold text-[#171725]">
                           {estimate.jarakKm.toFixed(1)} km (Bulat:{' '}
                           {estimate.jarakDibulatkanKm} km)
                         </span>
-                        <span className="block text-[10px] text-slate-400">
+                        <span className="block text-[10px] text-[#77788A]">
                           {estimate.sumberJarak}
                         </span>
                       </div>
 
-                      <div className="bg-white rounded-xl p-3 border border-emerald-100">
-                        <span className="text-slate-400 block text-[10px]">
+                      <div className="bg-white rounded-xl p-3 border border-[#E6E8F0]">
+                        <span className="text-[#77788A] block text-[10px]">
                           Biaya Ongkir
                         </span>
                         {isPihakKetiga ? (
                           <>
-                            <span className="font-bold text-amber-700 block">
+                            <span className="font-bold text-[#D97706] block">
                               Menunggu konfirmasi admin
                             </span>
                             {estimate.ongkir > 0 && (
-                              <span className="block text-[10px] text-slate-400">
+                              <span className="block text-[10px] text-[#77788A]">
                                 Perkiraan: {formatRupiah(estimate.ongkir)}
                               </span>
                             )}
                           </>
                         ) : (
                           <>
-                            <span className="font-bold text-[#174634]">
+                            <span className="font-extrabold text-[#4737FF]">
                               {estimate.ongkir === 0
                                 ? 'GRATIS'
                                 : formatRupiah(estimate.ongkir)}
                             </span>
-                            <span className="block text-[10px] text-slate-400">
+                            <span className="block text-[10px] text-[#77788A]">
                               {estimate.ongkirBersifatEstimasi
                                 ? 'Bersifat Estimasi'
                                 : 'Dibayar Online'}
@@ -726,39 +722,38 @@ export default function CheckoutPage() {
                         )}
                       </div>
 
-                      {/* Kartu Estimasi Tiba (WIB) */}
-                      <div className="bg-emerald-50/90 rounded-xl p-3 border border-emerald-300 shadow-2xs">
-                        <span className="text-emerald-800/80 font-medium block text-[10px] uppercase tracking-wider mb-0.5">
+                      <div className="bg-[#E7EFFF] rounded-xl p-3 border border-[#D1CDFF]">
+                        <span className="text-[#4737FF] font-bold block text-[10px] uppercase tracking-wider mb-0.5">
                           Estimasi Tiba (WIB)
                         </span>
-                        <span className="font-extrabold text-sm sm:text-base text-[#174634] block leading-tight">
+                        <span className="font-extrabold text-sm sm:text-base text-[#171725] block leading-tight">
                           {formatEstimasiTiba(
                             estimate.estimasiTiba,
                             estimate.jadwalHariIni
                           )}
                         </span>
-                        <span className="block text-[10px] text-emerald-700 font-medium mt-1">
+                        <span className="block text-[10px] text-[#4737FF] font-semibold mt-1">
                           ~{estimate.menitPerjalanan} menit perjalanan
                         </span>
                       </div>
 
-                      <div className="bg-white rounded-xl p-3 border border-emerald-100">
-                        <span className="text-slate-400 block text-[10px]">
+                      <div className="bg-white rounded-xl p-3 border border-[#E6E8F0]">
+                        <span className="text-[#77788A] block text-[10px]">
                           Muatan Fisik
                         </span>
-                        <span className="font-bold text-slate-900 flex items-center gap-1">
-                          <Scale className="w-3 h-3" />{' '}
+                        <span className="font-bold text-[#171725] flex items-center gap-1">
+                          <Scale className="w-3 h-3 text-[#4737FF]" />{' '}
                           {estimate.beratMuatanKg} kg
                         </span>
-                        <span className="block text-[10px] text-slate-500">
+                        <span className="block text-[10px] text-[#77788A]">
                           Volume: {estimate.volumeMuatanLiter} L
                         </span>
                       </div>
                     </div>
 
                     {isPihakKetiga && (
-                      <div className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-                        <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                      <div className="flex items-start gap-2 rounded-xl bg-[#D97706]/10 border border-[#D97706]/30 p-3 text-xs text-[#171725]">
+                        <Info className="w-4 h-4 text-[#D97706] shrink-0 mt-0.5" />
                         <span>
                           Pengiriman ini menggunakan{' '}
                           <strong>PIHAK_KETIGA</strong>. Menunggu konfirmasi
@@ -769,8 +764,8 @@ export default function CheckoutPage() {
                     )}
 
                     {estimate.alasan && estimate.alasan.length > 0 && (
-                      <div className="text-xs text-slate-600 space-y-1">
-                        <p className="font-semibold text-slate-800">
+                      <div className="text-xs text-[#5E5E6A] space-y-1">
+                        <p className="font-bold text-[#171725]">
                           Alasan Keputusan Sistem:
                         </p>
                         <ul className="list-disc list-inside space-y-0.5">
@@ -782,8 +777,8 @@ export default function CheckoutPage() {
                     )}
 
                     {estimate.peringatan && estimate.peringatan.length > 0 && (
-                      <div className="rounded-xl bg-amber-50/80 border border-amber-200 p-3 text-xs text-amber-800 space-y-1">
-                        <p className="font-semibold">Peringatan:</p>
+                      <div className="rounded-xl bg-[#D97706]/10 border border-[#D97706]/30 p-3 text-xs text-[#D97706] space-y-1">
+                        <p className="font-bold">Peringatan:</p>
                         <ul className="list-disc list-inside space-y-0.5">
                           {estimate.peringatan.map((warn, idx) => (
                             <li key={idx}>{warn}</li>
@@ -796,16 +791,16 @@ export default function CheckoutPage() {
               </div>
 
               {/* Bagian 2: Metode Pembayaran & Catatan */}
-              <div className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
-                <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-                  <div className="w-8 h-8 rounded-xl bg-[#f2efe9] text-[#174634] flex items-center justify-center">
+              <div className="ff-card bg-white p-6 space-y-4">
+                <div className="flex items-center gap-3 pb-3 border-b border-[#E6E8F0]">
+                  <div className="w-9 h-9 rounded-xl bg-[#E7EFFF] text-[#4737FF] flex items-center justify-center">
                     <CreditCard className="w-4 h-4" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-slate-900">
+                    <h2 className="font-heading text-sm font-extrabold text-[#171725]">
                       2. Metode Pembayaran Online & Catatan
                     </h2>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[11px] text-[#77788A]">
                       {isPihakKetiga
                         ? 'Untuk pengiriman pihak ketiga, pembayaran dilakukan di halaman detail pesanan setelah ongkir dikonfirmasi admin'
                         : 'Subtotal barang dan ongkir dibayar sekaligus secara online'}
@@ -818,14 +813,16 @@ export default function CheckoutPage() {
                     <button
                       type="button"
                       onClick={() => setValue('metodePay', 'QRIS')}
-                      className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer ${
                         selectedMetodePay === 'QRIS'
-                          ? 'border-[#174634] bg-[#174634]/5'
-                          : 'border-slate-200 hover:bg-slate-50'
+                          ? 'border-[#4737FF] bg-[#E7EFFF]/60'
+                          : 'border-[#E6E8F0] hover:border-[#ACA5FF] bg-[#F8FAFF]'
                       }`}
                     >
-                      <p className="text-xs font-bold text-slate-900">QRIS</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
+                      <p className="text-xs font-extrabold text-[#171725]">
+                        QRIS
+                      </p>
+                      <p className="text-[11px] text-[#77788A] mt-0.5">
                         Pembayaran digital via kode referensi
                       </p>
                     </button>
@@ -833,16 +830,16 @@ export default function CheckoutPage() {
                     <button
                       type="button"
                       onClick={() => setValue('metodePay', 'TRANSFER')}
-                      className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer ${
                         selectedMetodePay === 'TRANSFER'
-                          ? 'border-[#174634] bg-[#174634]/5'
-                          : 'border-slate-200 hover:bg-slate-50'
+                          ? 'border-[#4737FF] bg-[#E7EFFF]/60'
+                          : 'border-[#E6E8F0] hover:border-[#ACA5FF] bg-[#F8FAFF]'
                       }`}
                     >
-                      <p className="text-xs font-bold text-slate-900">
+                      <p className="text-xs font-extrabold text-[#171725]">
                         TRANSFER
                       </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
+                      <p className="text-[11px] text-[#77788A] mt-0.5">
                         Transfer rekening bank
                       </p>
                     </button>
@@ -852,7 +849,7 @@ export default function CheckoutPage() {
                 <div>
                   <label
                     htmlFor="catatan"
-                    className="block text-xs font-medium text-slate-700 mb-1.5"
+                    className="block text-xs font-semibold text-[#171725] mb-1.5"
                   >
                     Catatan Pesanan (Opsional)
                   </label>
@@ -862,15 +859,15 @@ export default function CheckoutPage() {
                     disabled={Boolean(pendingOrder)}
                     placeholder="Contoh: Tolong titipkan di satpam jika sedang tidak di rumah"
                     {...register('catatan')}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-[#174634] focus:outline-none disabled:bg-slate-100"
+                    className="w-full rounded-xl border border-[#E6E8F0] bg-[#F8FAFF] focus:bg-white px-3.5 py-2.5 text-sm text-[#171725] focus:border-[#4737FF] focus:outline-none disabled:bg-[#F1F3F8] transition-colors"
                   />
                 </div>
               </div>
             </div>
 
             {/* Kolom Kanan: Ringkasan Pesanan & Tombol Submit */}
-            <div className="bg-white rounded-3xl p-6 border border-slate-200 xl:sticky xl:top-6 space-y-5">
-              <h2 className="font-serif-title text-xl font-bold text-slate-900">
+            <div className="ff-card bg-white p-6 xl:sticky xl:top-6 space-y-5">
+              <h2 className="font-heading text-lg font-extrabold text-[#171725]">
                 Ringkasan Pesanan
               </h2>
 
@@ -880,17 +877,17 @@ export default function CheckoutPage() {
                   return (
                     <div
                       key={product.idProduk}
-                      className="flex items-start justify-between gap-2 text-xs pb-3 border-b border-slate-100"
+                      className="flex items-start justify-between gap-2 text-xs pb-3 border-b border-[#E6E8F0]"
                     >
                       <div>
-                        <p className="font-bold text-slate-800">
+                        <p className="font-bold text-[#171725]">
                           {product.namaProduk}
                         </p>
-                        <p className="text-slate-400">
+                        <p className="text-[#77788A]">
                           {safeQty} x {formatRupiah(product.hargaEceran)}
                         </p>
                       </div>
-                      <span className="font-semibold text-slate-900">
+                      <span className="font-extrabold text-[#171725]">
                         {formatRupiah(product.hargaEceran * safeQty)}
                       </span>
                     </div>
@@ -899,16 +896,16 @@ export default function CheckoutPage() {
               </div>
 
               <div className="space-y-2 text-xs pt-2">
-                <div className="flex justify-between text-slate-500">
+                <div className="flex justify-between text-[#77788A]">
                   <span>Subtotal Barang</span>
-                  <span className="font-medium text-slate-800">
+                  <span className="font-semibold text-[#171725]">
                     {formatRupiah(subtotal)}
                   </span>
                 </div>
 
-                <div className="flex justify-between text-slate-500">
+                <div className="flex justify-between text-[#77788A]">
                   <span>Ongkir</span>
-                  <span className="font-medium text-[#174634] text-right">
+                  <span className="font-bold text-[#159A68] text-right">
                     {!estimate
                       ? 'Hitung estimasi dulu'
                       : isPihakKetiga
@@ -919,9 +916,9 @@ export default function CheckoutPage() {
                   </span>
                 </div>
 
-                <div className="flex justify-between text-sm font-bold text-slate-900 pt-3 border-t border-slate-200">
+                <div className="flex justify-between text-sm font-extrabold text-[#171725] pt-3 border-t border-[#E6E8F0]">
                   <span>Total Keseluruhan</span>
-                  <span className="text-right text-[#174634]">
+                  <span className="text-right text-[#4737FF]">
                     {!estimate
                       ? formatRupiah(subtotal)
                       : isPihakKetiga
@@ -932,7 +929,7 @@ export default function CheckoutPage() {
               </div>
 
               {pendingOrder && !infoNotice && (
-                <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3.5 text-xs text-amber-800">
+                <div className="rounded-2xl bg-[#D97706]/10 border border-[#D97706]/30 p-3.5 text-xs text-[#171725]">
                   Pesanan <strong>#{pendingOrder.idOrder.slice(0, 8)}...</strong>{' '}
                   sudah tercatat. Klik tombol di bawah untuk melanjutkan
                   pembuatan pengiriman & pembayaran tanpa memotong stok ulang.
@@ -942,7 +939,7 @@ export default function CheckoutPage() {
               {infoNotice && (
                 <div
                   role="status"
-                  className="flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs font-semibold text-[#174634]"
+                  className="flex items-start gap-2 rounded-2xl border border-[#159A68]/30 bg-[#159A68]/10 p-3.5 text-xs font-bold text-[#159A68]"
                 >
                   <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{infoNotice}</span>
@@ -952,10 +949,10 @@ export default function CheckoutPage() {
               {submitError && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700"
+                  className="flex items-start gap-2 rounded-2xl border border-[#E5484D]/30 bg-[#E5484D]/10 p-3.5 text-xs text-[#E5484D]"
                 >
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{submitError}</span>
+                  <span className="font-medium">{submitError}</span>
                 </div>
               )}
 
@@ -967,7 +964,7 @@ export default function CheckoutPage() {
                   Boolean(estimateError) ||
                   Boolean(infoNotice)
                 }
-                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#174634] hover:bg-[#113527] disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold py-3.5 px-5 text-xs transition-colors cursor-pointer disabled:cursor-not-allowed"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#F75C03] hover:bg-[#D94800] disabled:bg-[#F1F3F8] disabled:text-[#77788A] text-white font-extrabold py-3.5 px-5 text-xs shadow-md shadow-[#F75C03]/25 transition-all cursor-pointer disabled:cursor-not-allowed disabled:shadow-none"
               >
                 {pendingOrder ? (
                   <>

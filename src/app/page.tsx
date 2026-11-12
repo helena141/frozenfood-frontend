@@ -5,33 +5,38 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import {
   Search,
-  Bell,
-  Clock,
-  ArrowRight,
-  LayoutGrid,
-  Star,
-  Box,
   Snowflake,
-  AlertCircle,
+  ShieldCheck,
+  Truck,
+  Sparkles,
+  ShoppingBag,
+  ArrowRight,
   RefreshCw,
+  AlertCircle,
+  Layers,
+  CheckCircle2,
 } from 'lucide-react';
 import { api } from '@/lib/axios';
-import { formatTanggalIndo, getErrorMessage } from '@/lib/utils';
 import { ProductCatalogResponse } from '@/types/api';
+import { getErrorMessage, getProductStock } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth-store';
+import { useCartStore } from '@/store/cart-store';
 import ShopSidebar from '@/components/shop/sidebar';
 import ProductCard from '@/components/shop/product-card';
-import CartPanel from '@/components/shop/cart-panel';
+import IncompleteProfileBanner from '@/components/auth/incomplete-profile-banner';
 
-export default function HomeCatalogPage() {
+export default function HomePage() {
   const user = useAuthStore((state) => state.user);
-  const [searchKeyword, setSearchKeyword] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('SEMUA');
-  const [todayDate, setTodayDate] = useState<string>('');
+  const items = useCartStore((state) => state.items);
+  const getTotalItems = useCartStore((state) => state.getTotalItems);
 
-  // Membaca tanggal di sisi klien setelah komponen ter-mount (mencegah error Next.js 16 new Date())
+  const [mounted, setMounted] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [onlyAvailable, setOnlyAvailable] = useState<boolean>(false);
+
   useEffect(() => {
-    setTodayDate(formatTanggalIndo(new Date()));
+    setMounted(true);
   }, []);
 
   const {
@@ -41,342 +46,389 @@ export default function HomeCatalogPage() {
     error,
     refetch,
   } = useQuery<ProductCatalogResponse[]>({
-    queryKey: ['products'],
+    queryKey: ['catalog-products'],
     queryFn: async () => {
-      const response = await api.get<ProductCatalogResponse[]>('/api/products');
-      return response.data;
+      const res = await api.get<ProductCatalogResponse[]>('/api/products');
+      return res.data;
     },
   });
 
-  // Menghitung daftar kategori unik beserta jumlah produknya
+  const activeProducts = useMemo(
+    () => products.filter((p) => p.isActive !== false),
+    [products]
+  );
+
   const categories = useMemo(() => {
-    const counts: Record<string, number> = {};
-    products.forEach((p) => {
-      const kat = p.kategori || 'Lainnya';
-      counts[kat] = (counts[kat] || 0) + 1;
+    const map = new Map<string, number>();
+    activeProducts.forEach((p) => {
+      const cat = (p.kategori || 'Lainnya').trim();
+      map.set(cat, (map.get(cat) || 0) + 1);
     });
-    return Object.entries(counts).map(([name, count]) => ({ name, count }));
-  }, [products]);
+    return Array.from(map.entries()).map(([name, count]) => ({ name, count }));
+  }, [activeProducts]);
 
-  // Filter produk berdasarkan pencarian dan kategori
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      const matchCategory =
-        selectedCategory === 'SEMUA' || product.kategori === selectedCategory;
-      const keyword = searchKeyword.trim().toLowerCase();
-      const matchKeyword =
-        !keyword ||
-        product.namaProduk.toLowerCase().includes(keyword) ||
-        (product.deskripsiProduk &&
-          product.deskripsiProduk.toLowerCase().includes(keyword)) ||
-        (product.kategori && product.kategori.toLowerCase().includes(keyword));
-      return matchCategory && matchKeyword;
-    });
-  }, [products, selectedCategory, searchKeyword]);
+    return activeProducts.filter((product) => {
+      const matchesCat =
+        selectedCategory === 'ALL' ||
+        (product.kategori || 'Lainnya').toLowerCase() ===
+          selectedCategory.toLowerCase();
 
-  const userInitials = user?.nama
-    ? user.nama
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase()
-    : 'LZ';
+      const q = searchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        product.namaProduk.toLowerCase().includes(q) ||
+        (product.kategori && product.kategori.toLowerCase().includes(q)) ||
+        (product.deskripsiProduk &&
+          product.deskripsiProduk.toLowerCase().includes(q));
+
+      const matchesStock = !onlyAvailable || getProductStock(product) > 0;
+
+      return matchesCat && matchesSearch && matchesStock;
+    });
+  }, [activeProducts, selectedCategory, searchQuery, onlyAvailable]);
+
+  const featuredVisualProduct = useMemo(
+    () => activeProducts.find((p) => Boolean(p.gambar)) || activeProducts[0],
+    [activeProducts]
+  );
+
+  const totalCartItems = mounted ? getTotalItems() : 0;
+  void items;
 
   return (
     <div className="lezzat-shell">
-      {/* Kolom 1: Sidebar Kiri */}
       <ShopSidebar />
 
-      {/* Kolom 2: Konten Utama Katalog */}
-      <main className="lezzat-main">
-        {/* Top Bar: Search & Profil */}
-        <header className="flex items-center justify-between gap-4 mb-8">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+      <main className="lezzat-main space-y-8">
+        <IncompleteProfileBanner />
+
+        {/* Header Bar Pencarian & Keranjang */}
+        <div className="bg-white rounded-2xl border border-[#E6E8F0] px-5 py-3.5 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
+          <div className="relative flex-1 min-w-[240px] max-w-xl">
+            <Search className="w-4 h-4 text-[#77788A] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="search"
-              value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="Cari nugget, dimsum, sosis..."
-              aria-label="Cari produk"
-              className="w-full rounded-2xl bg-white border border-slate-200 pl-11 pr-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#174634] focus:outline-none"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari bakso, nugget, dimsum, sosis premium..."
+              className="w-full rounded-xl border border-[#E6E8F0] bg-[#F8FAFF] focus:bg-white pl-10 pr-4 py-2.5 text-xs text-[#171725] focus:border-[#4737FF] focus:outline-none transition-colors"
             />
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              aria-label="Notifikasi"
-              className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50"
-            >
-              <Bell className="w-4 h-4" />
-            </button>
-
-            {user ? (
-              <Link
-                href="/profile"
-                className="flex items-center gap-2.5 bg-white border border-slate-200 hover:border-[#174634]/40 rounded-full pl-1.5 pr-3.5 py-1 transition-colors"
-              >
-                <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-800 text-xs font-bold flex items-center justify-center">
-                  {userInitials}
-                </div>
-                <div className="hidden sm:block text-left">
-                  <p className="text-xs font-bold text-slate-900 leading-none">
-                    {user.nama}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Pelanggan {user.tipeAkun}
-                  </p>
-                </div>
-              </Link>
-            ) : (
-              <Link
-                href="/login"
-                className="px-4 py-2 rounded-full bg-[#174634] text-white text-xs font-semibold hover:bg-[#113527]"
-              >
-                Masuk
-              </Link>
+            {mounted && user && (
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#F8FAFF] border border-[#E6E8F0] text-xs">
+                <span className="text-[#77788A]">Halo,</span>
+                <strong className="text-[#171725]">{user.nama}</strong>
+                <span className="px-2 py-0.5 rounded bg-[#E7EFFF] text-[#4737FF] text-[10px] font-extrabold">
+                  {user.tipeAkun}
+                </span>
+              </div>
             )}
-          </div>
-        </header>
 
-        {/* Baris Sapaan & Jam Operasional */}
-        <section className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
-          <div>
-            <p className="text-xs text-slate-500 mb-1 min-h-[16px]">
-              {todayDate}
-            </p>
-            <h1 className="font-serif-title text-3xl sm:text-4xl font-bold text-slate-900">
-              Selamat datang, {user ? user.nama.split(' ')[0] : 'Sahabat Lezzat'}.
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Mau masak praktis apa hari ini?
-            </p>
-          </div>
-
-          <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white border border-slate-200 text-xs text-slate-600 self-start sm:self-auto">
-            <Clock className="w-3.5 h-3.5 text-[#174634]" />
-            <span>Antar hari ini, 09:00–21:00 WIB</span>
-          </div>
-        </section>
-
-        {/* Hero Promo Banner sesuai Figma */}
-        <section className="relative rounded-3xl bg-[#174634] text-white p-7 sm:p-10 mb-8 overflow-hidden">
-          <div className="relative z-10 max-w-md">
-            <span className="inline-block px-3 py-1 rounded-full bg-[#e26d53] text-white text-[10px] font-bold tracking-wider uppercase mb-4">
-              PROMO MINGGU INI
-            </span>
-            <h2 className="font-serif-title text-3xl sm:text-4xl font-bold leading-tight mb-3">
-              Makin banyak, makin hemat.
-            </h2>
-            <p className="text-xs sm:text-sm text-emerald-50/85 mb-6">
-              Stok kebutuhan lauk beku pilihan keluarga dengan pengiriman terjaga dingin sampai ke pintu rumahmu.
-            </p>
-            <a
-              href="#katalog"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white text-[#174634] text-xs font-bold hover:bg-emerald-50 transition-colors"
+            <Link
+              href="/checkout"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#F75C03] hover:bg-[#D94800] text-white text-xs font-bold shadow-sm shadow-[#F75C03]/25 transition-all"
             >
-              <span>Belanja sekarang</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </a>
+              <ShoppingBag className="w-4 h-4" />
+              <span>Keranjang</span>
+              <span className="px-2 py-0.5 rounded-full bg-white text-[#F75C03] text-[10px] font-extrabold">
+                {totalCartItems}
+              </span>
+            </Link>
           </div>
-        </section>
+        </div>
 
-        {/* Filter Kategori (PILIHAN KATEGORI) */}
-        <section id="katalog" className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">
-                PILIHAN KATEGORI
+        {/* Hero Section Froznfood 2.0 */}
+        <section className="ff-hero-gradient rounded-3xl p-7 sm:p-10 lg:p-12 text-white relative overflow-hidden shadow-lg shadow-[#4737FF]/15">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div className="lg:col-span-7 space-y-5">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 border border-white/20 backdrop-blur-xs text-[11px] font-bold uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5 text-[#FFB36B]" />
+                <span>FROZNFOOD 2.0 • FRESHNESS IN EVERY BITE</span>
+              </div>
+
+              <h1 className="font-heading text-3xl sm:text-5xl font-extrabold leading-[1.12] tracking-tight">
+                Frozen Favorites, Delivered Fresh.
+              </h1>
+
+              <p className="text-sm sm:text-base text-white/85 leading-relaxed max-w-xl">
+                Nikmati pilihan frozen food berkualitas untuk keluarga dengan
+                harga terbaik dan pengiriman yang praktis.
               </p>
-              <h2 className="font-serif-title text-xl font-bold text-slate-900">
-                Mau makan apa?
-              </h2>
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <a
+                  href="#katalog-produk"
+                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-[#F75C03] hover:bg-[#D94800] text-white text-xs sm:text-sm font-extrabold shadow-lg shadow-[#F75C03]/30 transition-all"
+                >
+                  <span>Belanja Sekarang</span>
+                  <ArrowRight className="w-4 h-4" />
+                </a>
+
+                <Link
+                  href="/orders"
+                  className="inline-flex items-center gap-2 px-5 py-3.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs sm:text-sm font-semibold backdrop-blur-xs transition-colors"
+                >
+                  <span>Pesanan Saya</span>
+                </Link>
+              </div>
             </div>
-            {selectedCategory !== 'SEMUA' && (
-              <button
-                type="button"
-                onClick={() => setSelectedCategory('SEMUA')}
-                className="text-xs font-semibold text-[#174634] hover:underline cursor-pointer"
-              >
-                Reset filter
-              </button>
-            )}
+
+            <div className="lg:col-span-5">
+              <div className="bg-white/10 border border-white/20 backdrop-blur-md rounded-3xl p-4 shadow-2xl">
+                <div className="aspect-[4/3] rounded-2xl overflow-hidden bg-[#101018]/40 relative">
+                  {featuredVisualProduct?.gambar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={featuredVisualProduct.gambar}
+                      alt={featuredVisualProduct.namaProduk}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src="https://images.unsplash.com/photo-1625938144755-652e08e359b7?w=800&auto=format&fit=crop&q=80"
+                      alt="Premium Frozen Food"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  <div className="absolute bottom-3 left-3 right-3 bg-[#101018]/80 backdrop-blur-md rounded-xl p-3 flex items-center justify-between text-xs">
+                    <div className="truncate pr-2">
+                      <span className="text-[10px] text-[#ACA5FF] font-bold uppercase block">
+                        Produk Pilihan Katalog
+                      </span>
+                      <p className="font-bold text-white truncate">
+                        {featuredVisualProduct?.namaProduk ||
+                          'Koleksi Bakso, Dimsum & Nugget Premium'}
+                      </p>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg bg-[#159A68] text-white text-[10px] font-extrabold shrink-0">
+                      -18°C Fresh
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
+        </section>
 
-          <div
-            className="grid gap-3"
-            style={{
-              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setSelectedCategory('SEMUA')}
-              className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                selectedCategory === 'SEMUA'
-                  ? 'border-[#174634] bg-[#174634]/5'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
-              }`}
-            >
-              <div className="w-9 h-9 rounded-xl bg-[#174634] text-white flex items-center justify-center shrink-0">
-                <LayoutGrid className="w-4 h-4" />
+        {/* Why Choose Froznfood */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            {
+              icon: ShieldCheck,
+              title: 'Produk Berkualitas',
+              desc: 'Terbuat dari bahan pilihan berkualitas tinggi dan bersertifikasi higienis.',
+            },
+            {
+              icon: Snowflake,
+              title: 'Penyimpanan Terjaga',
+              desc: 'Suhu freezer -18°C dikontrol ketat dengan rotasi stok FEFO otomatis.',
+            },
+            {
+              icon: Truck,
+              title: 'Pengiriman Terpercaya',
+              desc: 'Armada kurir berinsulasi menjaga kesegaran hingga tiba di pintu Anda.',
+            },
+            {
+              icon: CheckCircle2,
+              title: 'Belanja Praktis',
+              desc: 'Pemesanan cepat, transparan, dan dilengkapi unduhan invoice resmi.',
+            },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <div
+                key={item.title}
+                className="ff-card p-5 flex items-start gap-3.5 bg-white"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#E7EFFF] text-[#4737FF] flex items-center justify-center shrink-0">
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-heading text-sm font-bold text-[#171725]">
+                    {item.title}
+                  </h3>
+                  <p className="text-xs text-[#77788A] mt-1 leading-relaxed">
+                    {item.desc}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-900 truncate">
-                  Semua Produk
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  {products.length} produk
-                </p>
-              </div>
-            </button>
+            );
+          })}
+        </section>
 
-            {categories.map((cat, idx) => (
+        {/* Kategori Produk */}
+        {categories.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-heading text-lg sm:text-xl font-extrabold text-[#171725]">
+                  Kategori Produk
+                </h2>
+                <p className="text-xs text-[#77788A]">
+                  Pilih kategori sesuai kebutuhan hidangan Anda
+                </p>
+              </div>
+              {selectedCategory !== 'ALL' && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('ALL')}
+                  className="text-xs font-bold text-[#4737FF] hover:underline cursor-pointer"
+                >
+                  Tampilkan Semua ({activeProducts.length})
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2.5 overflow-x-auto pb-2">
               <button
-                key={cat.name}
                 type="button"
-                onClick={() => setSelectedCategory(cat.name)}
-                className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                  selectedCategory === cat.name
-                    ? 'border-[#174634] bg-[#174634]/5'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
+                onClick={() => setSelectedCategory('ALL')}
+                className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  selectedCategory === 'ALL'
+                    ? 'bg-[#4737FF] text-white shadow-sm shadow-[#4737FF]/25'
+                    : 'bg-white border border-[#E6E8F0] text-[#5E5E6A] hover:border-[#4737FF]'
                 }`}
               >
-                <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    idx % 2 === 0
-                      ? 'bg-amber-50 text-amber-600'
-                      : 'bg-sky-50 text-sky-600'
-                  }`}
-                >
-                  {idx % 2 === 0 ? (
-                    <Star className="w-4 h-4" />
-                  ) : (
-                    <Box className="w-4 h-4" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-900 truncate">
-                    {cat.name}
-                  </p>
-                  <p className="text-[11px] text-slate-400">
-                    {cat.count} produk
-                  </p>
-                </div>
+                Semua Kategori ({activeProducts.length})
               </button>
-            ))}
-          </div>
-        </section>
 
-        {/* Daftar Produk (PALING DISUKAI / Produk populer) */}
-        <section id="populer">
-          <div className="flex items-center justify-between mb-4">
+              {categories.map((cat) => {
+                const isActive = selectedCategory === cat.name;
+                return (
+                  <button
+                    key={cat.name}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat.name)}
+                    className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 ${
+                      isActive
+                        ? 'bg-[#4737FF] text-white shadow-sm shadow-[#4737FF]/25'
+                        : 'bg-white border border-[#E6E8F0] text-[#171725] hover:border-[#4737FF]'
+                    }`}
+                  >
+                    <span>{cat.name}</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                        isActive
+                          ? 'bg-white/20 text-white'
+                          : 'bg-[#F1F3F8] text-[#77788A]'
+                      }`}
+                    >
+                      {cat.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Grid Katalog Produk */}
+        <section id="katalog-produk" className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">
-                PALING DISUKAI
-              </p>
-              <h2 className="font-serif-title text-xl font-bold text-slate-900">
-                Produk populer
+              <h2 className="font-heading text-xl sm:text-2xl font-extrabold text-[#171725]">
+                Katalog Frozen Food Pilihan
               </h2>
+              <p className="text-xs text-[#77788A]">
+                Menampilkan {filteredProducts.length} produk dari inventori aktif
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-[#E6E8F0] text-xs font-semibold text-[#171725] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={onlyAvailable}
+                  onChange={(e) => setOnlyAvailable(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded accent-[#4737FF]"
+                />
+                <span>Hanya Stok Tersedia</span>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-[#E6E8F0] hover:bg-[#F1F3F8] text-xs font-semibold text-[#171725] cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Segarkan</span>
+              </button>
             </div>
           </div>
 
-          {/* 1. KONDISI LOADING */}
           {isLoading && (
-            <div
-              className="grid gap-4"
-              style={{
-                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-              }}
-            >
-              {[1, 2, 3, 4].map((skeleton) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                 <div
-                  key={skeleton}
-                  className="bg-white rounded-3xl p-4 border border-slate-100 animate-pulse"
+                  key={n}
+                  className="ff-card h-80 animate-pulse bg-white p-4 space-y-4"
                 >
-                  <div className="h-44 w-full rounded-2xl bg-slate-200 mb-3" />
-                  <div className="h-3 w-20 bg-slate-200 rounded mb-2" />
-                  <div className="h-4 w-3/4 bg-slate-200 rounded mb-4" />
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-100">
-                    <div className="h-4 w-24 bg-slate-200 rounded" />
-                    <div className="h-9 w-9 rounded-full bg-slate-200" />
-                  </div>
+                  <div className="h-44 rounded-2xl bg-[#F1F3F8]" />
+                  <div className="h-4 w-2/3 rounded bg-[#F1F3F8]" />
+                  <div className="h-4 w-1/2 rounded bg-[#F1F3F8]" />
                 </div>
               ))}
             </div>
           )}
 
-          {/* 2. KONDISI ERROR */}
-          {isError && (
-            <div className="rounded-3xl bg-white border border-red-200 p-8 text-center max-w-md mx-auto my-6">
-              <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-3">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <h3 className="text-sm font-bold text-slate-900 mb-1">
-                Gagal memuat katalog produk
+          {!isLoading && isError && (
+            <div className="ff-card p-8 text-center max-w-lg mx-auto my-6">
+              <AlertCircle className="w-10 h-10 text-[#E5484D] mx-auto mb-3" />
+              <h3 className="font-heading text-base font-bold text-[#171725] mb-1">
+                Gagal Memuat Katalog Produk
               </h3>
-              <p className="text-xs text-slate-500 mb-4">
+              <p className="text-xs text-[#77788A] mb-5">
                 {getErrorMessage(
                   error,
-                  'Pastikan server backend Spring Boot di port 8080 sudah menyala.'
+                  'Pastikan server backend sedang berjalan.'
                 )}
               </p>
               <button
                 type="button"
                 onClick={() => refetch()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#174634] text-white text-xs font-semibold hover:bg-[#113527] cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-[#4737FF] text-white text-xs font-bold cursor-pointer"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Coba Lagi</span>
+                Muat Ulang Katalog
               </button>
             </div>
           )}
 
-          {/* 3. KONDISI KOSONG */}
           {!isLoading && !isError && filteredProducts.length === 0 && (
-            <div className="rounded-3xl bg-white border border-slate-200 p-10 text-center my-4">
-              <Snowflake className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <h3 className="text-sm font-bold text-slate-800 mb-1">
-                Produk tidak ditemukan
+            <div className="ff-card p-12 text-center">
+              <Layers className="w-10 h-10 text-[#ACA5FF] mx-auto mb-3" />
+              <h3 className="font-heading text-base font-bold text-[#171725] mb-1">
+                Produk Tidak Ditemukan
               </h3>
-              <p className="text-xs text-slate-500">
-                {searchKeyword || selectedCategory !== 'SEMUA'
-                  ? 'Tidak ada produk yang cocok dengan pencarian atau kategori yang dipilih.'
-                  : 'Belum ada produk di dalam database katalog.'}
+              <p className="text-xs text-[#77788A] mb-4">
+                Coba ubah kata kunci pencarian atau reset filter kategori.
               </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('ALL');
+                  setOnlyAvailable(false);
+                }}
+                className="px-4 py-2 rounded-xl bg-[#4737FF] text-white text-xs font-bold cursor-pointer"
+              >
+                Reset Filter
+              </button>
             </div>
           )}
 
-          {/* 4. KONDISI DATA TERSEDIA */}
           {!isLoading && !isError && filteredProducts.length > 0 && (
-            <div
-              className="grid gap-4"
-              style={{
-                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-              }}
-            >
-              {filteredProducts.map((product, index) => (
-                <ProductCard
-                  key={product.idProduk}
-                  product={product}
-                  badgeText={
-                    index === 0
-                      ? 'TERLARIS'
-                      : index === 1
-                        ? 'FAVORIT'
-                        : undefined
-                  }
-                />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {filteredProducts.map((product) => (
+                <ProductCard key={product.idProduk} product={product} />
               ))}
             </div>
           )}
         </section>
       </main>
-
-      {/* Kolom 3: Panel Keranjang Kanan */}
-      <CartPanel />
     </div>
   );
 }
