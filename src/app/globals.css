@@ -1,84 +1,69 @@
 @import "tailwindcss";
 
 :root {
-  --ff-primary: #4737FF;
-  --ff-primary-dark: #3529BF;
-  --ff-dark: #101018;
-  --ff-soft-purple: #ACA5FF;
-  --ff-accent-orange: #F75C03;
-  --ff-accent-orange-hover: #D94800;
-  --ff-bg-main: #F8FAFF;
-  --ff-bg-secondary: #F1F3F8;
-  --ff-surface: #FFFFFF;
-  --ff-text-primary: #171725;
-  --ff-text-secondary: #77788A;
-  --ff-border: #E6E8F0;
-  --ff-gradient-hero: linear-gradient(110deg, #101018 0%, #3529BF 40%, #4737FF 70%, #ACA5FF 100%);
+  --ff-primary: #4737ff;
+  --ff-primary-hover: #3529bf;
+  --ff-accent: #f75c03;
+  --ff-accent-hover: #d94800;
+  --ff-success: #159a68;
+  --ff-warning: #d97706;
+  --ff-danger: #e5484d;
+  --ff-bg: #f8fafc;
+  --ff-surface: #ffffff;
+  --ff-border: #e2e8f0;
+  --ff-text: #1e293b;
+  --ff-muted: #64748b;
 }
 
 body {
-  background-color: var(--ff-bg-main);
-  color: var(--ff-text-primary);
-  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
-  overflow-x: hidden;
+  background-color: var(--ff-bg);
+  color: var(--ff-text);
+  font-family: var(--font-jakarta), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4, .font-heading, .font-serif-title {
-  font-family: var(--font-jakarta), sans-serif !important;
+.font-heading,
+.font-serif-title {
+  font-family: var(--font-outfit), var(--font-jakarta), system-ui, sans-serif;
   letter-spacing: -0.02em;
 }
 
 .lezzat-shell {
   min-height: 100vh;
   display: flex;
-  flex-direction: column;
-  background-color: var(--ff-bg-main);
-}
-
-@media (min-width: 1024px) {
-  .lezzat-shell {
-    flex-direction: row;
-  }
+  background-color: #f8fafc;
+  color: #1e293b;
 }
 
 .lezzat-main {
   flex: 1;
   min-width: 0;
-  padding: 1.5rem 1.25rem 3rem;
-  max-width: 1440px;
-  width: 100%;
-  margin: 0 auto;
+  padding: 1.25rem 1rem 2.5rem;
 }
 
 @media (min-width: 640px) {
   .lezzat-main {
-    padding: 2rem 2rem 3.5rem;
+    padding: 1.5rem 1.5rem 3rem;
   }
 }
 
-.ff-hero-gradient {
-  background: var(--ff-gradient-hero);
+.ff-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
 }
 
-.ff-card {
-  background-color: #FFFFFF;
-  border: 1px solid #E6E8F0;
-  border-radius: 1.25rem;
-  box-shadow: 0 10px 30px -10px rgba(16, 16, 24, 0.05);
-  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+.ff-card-interactive {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .ff-card-interactive:hover {
   transform: translateY(-2px);
-  box-shadow: 0 20px 38px -12px rgba(71, 55, 255, 0.12);
-  border-color: #D1CDFF;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px -2px rgba(71, 55, 255, 0.08);
 }
 
-/* Otomatis ubah class warna hijau/krem lama ke tema Froznfood 2.0 */
-.bg-\[\#174634\] { background-color: #4737FF !important; }
-.hover\:bg-\[\#113527\]:hover { background-color: #3529BF !important; }
-.text-\[\#174634\] { color: #4737FF !important; }
-.border-\[\#174634\] { border-color: #4737FF !important; }
-.focus\:border-\[\#174634\]:focus { border-color: #4737FF !important; }
-.bg-\[\#f4f1ea\], .bg-\[\#f7f6f2\] { background-color: #F8FAFF !important; }
-.bg-\[\#f2efe9\] { background-color: #E7EFFF !important; }
+.ff-hero-gradient {
+  background: linear-gradient(135deg, #4737ff 0%, #3529bf 60%, #2b2199 100%);
+}

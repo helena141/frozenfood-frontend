@@ -7,156 +7,237 @@ import {
   Check,
   Snowflake,
   Layers,
-  Eye,
 } from 'lucide-react';
 import { ProductCatalogResponse } from '@/types/api';
-import { formatRupiah, getProductStock } from '@/lib/utils';
+import {
+  formatRupiah,
+  getProductStock,
+  hasExplicitStock,
+} from '@/lib/utils';
 import { useCartStore } from '@/store/cart-store';
 import { useAuthStore } from '@/store/auth-store';
 
-interface ProductCardProps {
+export interface ProductCardProps {
   product: ProductCatalogResponse;
+  promoPercent?: number;
+  onAddedToCart?: (product: ProductCatalogResponse) => void;
 }
 
-function formatGramLabel(rawBerat: number | undefined | null): string {
+const numberFormatterId = new Intl.NumberFormat('id-ID');
+
+export function formatGramLabel(rawBerat: number | undefined | null): string {
   const val = Number(rawBerat || 0);
   if (val <= 0) return '500 g';
   const grams = val <= 50 ? Math.round(val * 1000) : Math.round(val);
-  return `${grams.toLocaleString('id-ID')} g`;
+  return `${numberFormatterId.format(grams)} g`;
 }
 
-export default function ProductCard({ product }: ProductCardProps) {
+export function extractProductPromo(
+  product: ProductCatalogResponse,
+  overridePercent?: number
+): { discountPercent: number; originalPrice: number | null } {
+  const raw = product as unknown as Record<string, unknown>;
+  const apiDiscount =
+    typeof raw.diskonPersen === 'number'
+      ? raw.diskonPersen
+      : typeof raw.discountPercent === 'number'
+        ? raw.discountPercent
+        : 0;
+
+  const discountPercent = overridePercent ?? apiDiscount;
+
+  const apiOriginalPrice =
+    typeof raw.hargaCoret === 'number' && raw.hargaCoret > product.hargaEceran
+      ? raw.hargaCoret
+      : typeof raw.hargaAsli === 'number' && raw.hargaAsli > product.hargaEceran
+        ? raw.hargaAsli
+        : null;
+
+  if (apiOriginalPrice) {
+    const calculatedPct = Math.round(
+      ((apiOriginalPrice - product.hargaEceran) / apiOriginalPrice) * 100
+    );
+    return {
+      discountPercent: discountPercent > 0 ? discountPercent : calculatedPct,
+      originalPrice: apiOriginalPrice,
+    };
+  }
+
+  if (discountPercent > 0 && discountPercent < 90) {
+    const originalPrice = Math.round(
+      product.hargaEceran / (1 - discountPercent / 100)
+    );
+    return { discountPercent, originalPrice };
+  }
+
+  return { discountPercent: 0, originalPrice: null };
+}
+
+export default function ProductCard({
+  product,
+  promoPercent,
+  onAddedToCart,
+}: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
   const user = useAuthStore((state) => state.user);
   const [added, setAdded] = useState(false);
 
+  const explicitStock = hasExplicitStock(product);
   const stock = getProductStock(product);
-  const isOutOfStock = stock <= 0;
+  const isOutOfStock =
+    product.isActive === false || (explicitStock && stock <= 0) || stock <= 0;
+  const isLowStock = !isOutOfStock && explicitStock && stock <= 10;
   const isB2B = user?.tipeAkun === 'B2B';
 
-  const handleAddToCart = (e: React.MouseEvent) => {
+  const { discountPercent, originalPrice } = extractProductPromo(
+    product,
+    promoPercent
+  );
+
+  const handleAddToCart = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
     if (isOutOfStock) return;
     addItem(product, 1);
     setAdded(true);
+    if (onAddedToCart) {
+      onAddedToCart(product);
+    }
     setTimeout(() => setAdded(false), 1400);
   };
 
   return (
-    <div className="group ff-card ff-card-interactive flex flex-col overflow-hidden bg-white">
-      <Link
-        href={`/products/${product.idProduk}`}
-        className="relative aspect-[4/3] w-full bg-[#F1F3F8] overflow-hidden block"
-      >
+    <Link
+      href={`/products/${product.idProduk}`}
+      className={`group rounded-xl border border-slate-200 bg-white shadow-sm hover:border-slate-300 hover:shadow-md transition-all flex flex-col overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4737FF] ${
+        isOutOfStock ? 'opacity-65' : ''
+      }`}
+    >
+      {/* Gambar Rasio 4:3 */}
+      <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden">
         {product.gambar ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={product.gambar}
             alt={product.namaProduk}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+            className={`w-full h-full object-cover motion-safe:group-hover:scale-105 transition-transform duration-300 ${
+              isOutOfStock ? 'grayscale-[35%]' : ''
+            }`}
           />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-[#4737FF]/40 bg-gradient-to-br from-[#E7EFFF] to-[#F8FAFF]">
-            <Snowflake className="w-10 h-10 mb-1.5" />
-            <span className="text-[11px] font-semibold text-[#77788A]">
-              Froznfood Quality
+          <div className="w-full h-full flex flex-col items-center justify-center text-[#4737FF]/40 bg-slate-50">
+            <Snowflake className="w-9 h-9 mb-1" />
+            <span className="text-[11px] font-semibold text-slate-400">
+              Lezzat Frozen Food
             </span>
           </div>
         )}
 
-        <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2 pointer-events-none">
-          <span className="px-2.5 py-1 rounded-lg bg-white/95 backdrop-blur-xs text-[#171725] text-[10px] font-bold shadow-xs">
-            {product.kategori || 'Frozen Food'}
-          </span>
+        {/* Badge Sudut Atas: Promo / Stok Terbatas / Habis */}
+        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-start justify-between gap-1.5 pointer-events-none">
+          <div className="flex flex-wrap items-center gap-1">
+            {isOutOfStock ? (
+              <span className="px-2 py-0.5 rounded-lg bg-slate-600 text-white text-[10px] font-bold shadow-2xs">
+                Habis
+              </span>
+            ) : discountPercent > 0 ? (
+              <span className="px-2 py-0.5 rounded-lg bg-[#F75C03] text-white text-[10px] font-extrabold shadow-2xs">
+                Promo -{discountPercent}%
+              </span>
+            ) : isLowStock ? (
+              <span className="px-2 py-0.5 rounded-lg bg-[#F75C03] text-white text-[10px] font-bold shadow-2xs">
+                Stok terbatas
+              </span>
+            ) : null}
+          </div>
 
           {isB2B && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#4737FF] text-white text-[10px] font-bold shadow-sm">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#4737FF] text-white text-[10px] font-bold shadow-2xs">
               <Layers className="w-3 h-3" />
-              <span>Akun Mitra B2B</span>
+              <span>B2B</span>
             </span>
           )}
         </div>
 
-        <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between">
-          <span
-            className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold backdrop-blur-xs ${
-              isOutOfStock
-                ? 'bg-[#E5484D] text-white'
-                : stock <= 10
-                  ? 'bg-[#D97706] text-white'
-                  : 'bg-[#101018]/75 text-white'
-            }`}
-          >
-            {isOutOfStock ? 'Stok Habis' : `Stok: ${stock} unit`}
-          </span>
-
-          <span className="px-2 py-0.5 rounded-md bg-white/90 text-[#171725] text-[10px] font-semibold">
+        {/* Informasi Berat Satuan di Sudut Bawah */}
+        <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
+          {!isOutOfStock && !isLowStock && (
+            <span className="px-2 py-0.5 rounded-lg bg-[#159A68] text-white text-[10px] font-bold">
+              Tersedia
+            </span>
+          )}
+          <span className="ml-auto px-2 py-0.5 rounded-lg bg-white/95 text-slate-700 text-[10px] font-semibold shadow-2xs">
             {formatGramLabel(product.berat)}
           </span>
         </div>
-      </Link>
+      </div>
 
-      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-        <div>
-          <Link
-            href={`/products/${product.idProduk}`}
-            className="font-heading text-base font-bold text-[#171725] hover:text-[#4737FF] transition-colors line-clamp-1"
-          >
+      {/* Konten Kartu */}
+      <div className="p-3.5 flex-1 flex flex-col justify-between space-y-3">
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="inline-block px-2 py-0.5 rounded-lg bg-[#4737FF]/10 text-[#4737FF] text-[10px] font-bold truncate max-w-[140px]">
+              {product.kategori || 'Frozen Food'}
+            </span>
+            <span className="text-[11px] font-medium text-slate-400 shrink-0">
+              {formatGramLabel(product.berat)}
+            </span>
+          </div>
+
+          <h3 className="font-heading text-sm font-bold text-slate-800 group-hover:text-[#4737FF] transition-colors line-clamp-2 min-h-[2.5rem] leading-snug">
             {product.namaProduk}
-          </Link>
-          <p className="text-xs text-[#77788A] line-clamp-2 mt-1 leading-relaxed min-h-[2.25rem]">
-            {product.deskripsiProduk ||
-              'Produk frozen food higienis dengan penyimpanan rantai dingin -18°C.'}
-          </p>
+          </h3>
         </div>
 
-        <div className="pt-3 border-t border-[#E6E8F0] flex items-end justify-between gap-2">
-          <div>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#77788A] block">
-              Harga Eceran
-            </span>
-            <span className="font-heading text-lg font-extrabold text-[#4737FF]">
+        {/* Harga & Tombol + Keranjang */}
+        <div className="pt-2.5 border-t border-slate-100 flex items-end justify-between gap-2">
+          <div className="min-w-0">
+            {originalPrice ? (
+              <span className="text-[10px] text-slate-400 line-through block leading-none mb-0.5">
+                {formatRupiah(originalPrice)}
+              </span>
+            ) : (
+              <span className="text-[10px] font-medium text-slate-400 block leading-none mb-0.5">
+                Harga satuan
+              </span>
+            )}
+            <span className="font-heading text-base font-extrabold text-[#4737FF] block truncate">
               {formatRupiah(product.hargaEceran)}
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <Link
-              href={`/products/${product.idProduk}`}
-              aria-label={`Detail ${product.namaProduk}`}
-              className="p-2.5 rounded-xl border border-[#E6E8F0] hover:border-[#4737FF] text-[#5E5E6A] hover:text-[#4737FF] transition-colors"
-            >
-              <Eye className="w-4 h-4" />
-            </Link>
-
-            <button
-              type="button"
-              disabled={isOutOfStock}
-              onClick={handleAddToCart}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                isOutOfStock
-                  ? 'bg-[#F1F3F8] text-[#77788A] cursor-not-allowed'
-                  : added
-                    ? 'bg-[#159A68] text-white'
-                    : 'bg-[#F75C03] hover:bg-[#D94800] text-white shadow-sm shadow-[#F75C03]/25'
-              }`}
-            >
-              {added ? (
-                <>
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Masuk</span>
-                </>
-              ) : (
-                <>
-                  <ShoppingBag className="w-3.5 h-3.5" />
-                  <span>+ Keranjang</span>
-                </>
-              )}
-            </button>
-          </div>
+          <button
+            type="button"
+            disabled={isOutOfStock}
+            onClick={handleAddToCart}
+            aria-label={
+              isOutOfStock
+                ? `${product.namaProduk} habis`
+                : `Tambah ${product.namaProduk} ke keranjang`
+            }
+            className={`inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition-colors shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4737FF] ${
+              isOutOfStock
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                : added
+                  ? 'bg-[#159A68] text-white'
+                  : 'bg-[#F75C03] hover:bg-[#D94800] text-white shadow-2xs'
+            }`}
+          >
+            {added ? (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span>Ditambahkan</span>
+              </>
+            ) : (
+              <>
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>+ Keranjang</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
