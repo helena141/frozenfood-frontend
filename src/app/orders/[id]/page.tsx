@@ -464,6 +464,18 @@ function OrderStatusContent() {
     ? activeOrder.items.reduce((sum, item) => sum + item.subtotalItem, 0)
     : 0;
 
+  const totalHargaNormalBarang = activeOrder?.items?.length
+    ? activeOrder.items.reduce((sum, item) => {
+        const hargaNormal =
+          typeof item.hargaAsli === 'number' && item.hargaAsli > 0
+            ? item.hargaAsli
+            : item.hargaSatuanSnapshot;
+        return sum + hargaNormal * item.quantity;
+      }, 0)
+    : 0;
+
+  const totalHematBarang = Math.max(0, totalHargaNormalBarang - subtotalBarang);
+
   const isOngkirPendingAdmin =
     delivery?.pelaksana === 'PIHAK_KETIGA' &&
     delivery?.statusDelivery === 'MENUNGGU_KONFIRMASI_ADMIN';
@@ -1010,7 +1022,9 @@ function OrderStatusContent() {
                         <tr className="border-b border-[#E6E8F0] text-[#77788A] uppercase tracking-wider text-[11px]">
                           <th className="pb-2.5 font-bold">Nama Produk</th>
                           <th className="pb-2.5 font-bold">Batch FEFO</th>
-                          <th className="pb-2.5 font-bold">Harga Satuan</th>
+                          <th className="pb-2.5 font-bold">
+                            Harga Normal vs Deal/Tier
+                          </th>
                           <th className="pb-2.5 font-bold">Qty</th>
                           <th className="pb-2.5 font-bold text-right">
                             Subtotal Barang
@@ -1018,30 +1032,85 @@ function OrderStatusContent() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E6E8F0]">
-                        {activeOrder.items.map((item) => (
-                          <tr key={item.idOrderItem}>
-                            <td className="py-3.5 font-bold text-[#171725]">
-                              {item.namaProduk}
-                            </td>
-                            <td className="py-3.5 font-mono text-[11px] text-[#77788A]">
-                              {item.idProdBatch}
-                            </td>
-                            <td className="py-3.5 text-[#5E5E6A]">
-                              {formatRupiah(item.hargaSatuanSnapshot)}
-                            </td>
-                            <td className="py-3.5 font-bold text-[#171725]">
-                              {item.quantity}
-                            </td>
-                            <td className="py-3.5 font-extrabold text-[#171725] text-right">
-                              {formatRupiah(item.subtotalItem)}
-                            </td>
-                          </tr>
-                        ))}
+                        {activeOrder.items.map((item) => {
+                          const hasDisc =
+                            typeof item.hargaAsli === 'number' &&
+                            item.hargaAsli > item.hargaSatuanSnapshot;
+
+                          return (
+                            <tr key={item.idOrderItem}>
+                              <td className="py-3.5">
+                                <span className="font-bold text-[#171725] block">
+                                  {item.namaProduk}
+                                </span>
+                                {hasDisc && item.keteranganPromo && (
+                                  <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-[#F75C03]/15 text-[#D93800] text-[10px] font-extrabold">
+                                    {item.keteranganPromo}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3.5 font-mono text-[11px] text-[#77788A]">
+                                {item.idProdBatch}
+                              </td>
+                              <td className="py-3.5">
+                                {hasDisc ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-[11px] text-[#77788A] line-through">
+                                      {formatRupiah(item.hargaAsli!)}
+                                    </span>
+                                    <span className="font-extrabold text-[#F75C03]">
+                                      {formatRupiah(item.hargaSatuanSnapshot)}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-[#5E5E6A] font-semibold">
+                                    {formatRupiah(item.hargaSatuanSnapshot)}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3.5 font-bold text-[#171725]">
+                                {item.quantity}
+                              </td>
+                              <td className="py-3.5 text-right">
+                                {hasDisc && (
+                                  <span className="block text-[10px] text-[#77788A] line-through">
+                                    {formatRupiah(
+                                      item.hargaAsli! * item.quantity
+                                    )}
+                                  </span>
+                                )}
+                                <span
+                                  className={`font-extrabold ${
+                                    hasDisc
+                                      ? 'text-[#F75C03]'
+                                      : 'text-[#171725]'
+                                  }`}
+                                >
+                                  {formatRupiah(item.subtotalItem)}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
 
                   <div className="pt-3 border-t border-[#E6E8F0] space-y-2 text-xs">
+                    {totalHematBarang > 0 && (
+                      <>
+                        <div className="flex justify-between text-[#77788A]">
+                          <span>Total Harga Normal</span>
+                          <span className="line-through">
+                            {formatRupiah(totalHargaNormalBarang)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-[#159A68] font-bold">
+                          <span>Total Hemat (Diskon FEFO / Tiering)</span>
+                          <span>- {formatRupiah(totalHematBarang)}</span>
+                        </div>
+                      </>
+                    )}
                     <div className="flex justify-between text-[#5E5E6A]">
                       <span>Subtotal Barang</span>
                       <span className="font-bold text-[#171725]">

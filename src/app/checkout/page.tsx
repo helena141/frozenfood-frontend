@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/axios';
 import {
+  evaluateCartItemPricing,
   formatRupiah,
   formatEstimasiTiba,
   getErrorMessage,
@@ -102,7 +103,13 @@ function extractFirstPayment(raw: unknown): PaymentResponse | null {
 export default function CheckoutPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const { items, getSubtotal, clearCart } = useCartStore();
+  const {
+    items,
+    getSubtotal,
+    getOriginalSubtotal,
+    getTotalSaved,
+    clearCart,
+  } = useCartStore();
 
   const [estimate, setEstimate] = useState<DeliveryEstimateResponse | null>(
     null
@@ -115,7 +122,9 @@ export default function CheckoutPage() {
 
   const [pendingOrder, setPendingOrder] = useState<OrderResponse | null>(null);
 
-  const subtotal = getSubtotal();
+  const subtotal = getSubtotal(user?.tipeAkun);
+  const originalSubtotal = getOriginalSubtotal();
+  const totalSaved = getTotalSaved(user?.tipeAkun);
 
   const {
     register,
@@ -871,31 +880,97 @@ export default function CheckoutPage() {
                 Ringkasan Pesanan
               </h2>
 
-              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
                 {items.map(({ product, qty }) => {
                   const safeQty = Number.isNaN(qty) || qty < 1 ? 1 : qty;
+                  const pricing = evaluateCartItemPricing(
+                    product,
+                    safeQty,
+                    user?.tipeAkun
+                  );
+
                   return (
                     <div
                       key={product.idProduk}
-                      className="flex items-start justify-between gap-2 text-xs pb-3 border-b border-[#E6E8F0]"
+                      className="flex flex-col gap-1.5 text-xs pb-3 border-b border-[#E6E8F0]"
                     >
-                      <div>
-                        <p className="font-bold text-[#171725]">
-                          {product.namaProduk}
-                        </p>
-                        <p className="text-[#77788A]">
-                          {safeQty} x {formatRupiah(product.hargaEceran)}
-                        </p>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-bold text-[#171725]">
+                            {product.namaProduk}
+                          </p>
+                          {pricing.hasDiscount ? (
+                            <div className="mt-0.5 space-y-0.5">
+                              {pricing.lines.map((line, idx) => (
+                                <p key={idx} className="text-[11px] text-[#5E5E6A]">
+                                  {line.qty} x{' '}
+                                  {line.isDiscounted && (
+                                    <span className="line-through text-[#77788A] mr-1">
+                                      {formatRupiah(pricing.originalUnitPrice)}
+                                    </span>
+                                  )}
+                                  <strong
+                                    className={
+                                      line.isDiscounted
+                                        ? 'text-[#F75C03]'
+                                        : 'text-[#171725]'
+                                    }
+                                  >
+                                    {formatRupiah(line.unitPrice)}
+                                  </strong>{' '}
+                                  {line.isDiscounted && (
+                                    <span className="inline-block ml-1 px-1.5 py-0.5 rounded bg-[#F75C03]/15 text-[#D93800] text-[9px] font-extrabold">
+                                      {line.label}
+                                    </span>
+                                  )}
+                                </p>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[#77788A]">
+                              {safeQty} x {formatRupiah(product.hargaEceran)}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          {pricing.hasDiscount && (
+                            <span className="block text-[10px] text-[#77788A] line-through">
+                              {formatRupiah(pricing.originalSubtotal)}
+                            </span>
+                          )}
+                          <span
+                            className={`font-extrabold ${
+                              pricing.hasDiscount
+                                ? 'text-[#F75C03]'
+                                : 'text-[#171725]'
+                            }`}
+                          >
+                            {formatRupiah(pricing.finalSubtotal)}
+                          </span>
+                        </div>
                       </div>
-                      <span className="font-extrabold text-[#171725]">
-                        {formatRupiah(product.hargaEceran * safeQty)}
-                      </span>
                     </div>
                   );
                 })}
               </div>
 
               <div className="space-y-2 text-xs pt-2">
+                {totalSaved > 0 && (
+                  <>
+                    <div className="flex justify-between text-[#77788A]">
+                      <span>Total Harga Normal</span>
+                      <span className="line-through">
+                        {formatRupiah(originalSubtotal)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[#159A68] font-bold">
+                      <span>Total Hemat (Diskon / Tiering)</span>
+                      <span>- {formatRupiah(totalSaved)}</span>
+                    </div>
+                  </>
+                )}
+
                 <div className="flex justify-between text-[#77788A]">
                   <span>Subtotal Barang</span>
                   <span className="font-semibold text-[#171725]">

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/axios';
 import {
+  evaluateCartItemPricing,
   formatRupiah,
   getErrorMessage,
   getProductStock,
@@ -228,34 +229,41 @@ function supportsHalalBadge(product: ProductCatalogResponse): boolean {
  */
 function extractB2BTiers(
   product: ProductCatalogResponse
-): { minQty: number; price: number; label?: string }[] {
-  const raw = product as unknown as Record<string, unknown>;
-  const tiers: { minQty: number; price: number; label?: string }[] = [];
+): { minQty: number; maxQty?: number; price: number; label?: string }[] {
+  const tiers: {
+    minQty: number;
+    maxQty?: number;
+    price: number;
+    label?: string;
+  }[] = [];
 
+  if (Array.isArray(product.tieringPrices) && product.tieringPrices.length > 0) {
+    product.tieringPrices.forEach((t) => {
+      if (t.minQty > 0 && t.hargaPerUnit > 0) {
+        tiers.push({
+          minQty: t.minQty,
+          maxQty: t.maxQty,
+          price: t.hargaPerUnit,
+          label: t.maxQty
+            ? `${t.minQty} – ${t.maxQty} unit`
+            : `Min. ${t.minQty} unit`,
+        });
+      }
+    });
+    return tiers;
+  }
+
+  const raw = product as unknown as Record<string, unknown>;
   if (Array.isArray(raw.tierPrices)) {
     raw.tierPrices.forEach((t) => {
       if (t && typeof t === 'object') {
         const obj = t as Record<string, unknown>;
         const minQty = Number(obj.minQty ?? obj.minQuantity ?? 0);
-        const price = Number(obj.price ?? obj.harga ?? 0);
+        const price = Number(obj.price ?? obj.harga ?? obj.hargaPerUnit ?? 0);
         if (minQty > 0 && price > 0) {
           tiers.push({ minQty, price });
         }
       }
-    });
-  } else if (
-    typeof raw.hargaGrosir === 'number' &&
-    raw.hargaGrosir > 0 &&
-    raw.hargaGrosir < product.hargaEceran
-  ) {
-    const minGrosir =
-      typeof raw.minOrderGrosir === 'number' && raw.minOrderGrosir > 1
-        ? raw.minOrderGrosir
-        : 10;
-    tiers.push({
-      minQty: minGrosir,
-      price: raw.hargaGrosir,
-      label: `Beli ${minGrosir}+ lebih hemat`,
     });
   }
 
@@ -374,11 +382,16 @@ function ProductDetailContent() {
   );
   const activeImageUrl = galleryImages[selectedImageIdx] || galleryImages[0] || null;
 
-  const { discountPercent, originalPrice } = useMemo(
+  const { discountPercent, originalPrice, finalPrice, labelDeal } = useMemo(
     () =>
       product
         ? extractProductPromo(product)
-        : { discountPercent: 0, originalPrice: null },
+        : {
+            discountPercent: 0,
+            originalPrice: null,
+            finalPrice: 0,
+            labelDeal: null,
+          },
     [product]
   );
 
@@ -388,9 +401,8 @@ function ProductDetailContent() {
   );
 
   const b2bTiers = useMemo(
-    () =>
-      product && user?.tipeAkun === 'B2B' ? extractB2BTiers(product) : [],
-    [product, user?.tipeAkun]
+    () => (product ? extractB2BTiers(product) : []),
+    [product]
   );
 
   const parsedDescription = useMemo(
@@ -486,11 +498,14 @@ function ProductDetailContent() {
   };
 
   const totalCartItems = mounted ? getTotalItems() : 0;
-  const cartSubtotal = mounted ? getSubtotal() : 0;
+  const cartSubtotal = mounted ? getSubtotal(user?.tipeAkun) : 0;
   const displayCartItems = mounted ? cartItems : [];
 
   const hasValidVolume = Boolean(product?.volume && Number(product.volume) > 0);
-  const currentSubtotal = product ? product.hargaEceran * qty : 0;
+  const currentPricing = product
+    ? evaluateCartItemPricing(product, qty, user?.tipeAkun)
+    : null;
+  const currentSubtotal = currentPricing ? currentPricing.finalSubtotal : 0;
 
   return (
     <div className="lezzat-shell">
@@ -699,7 +714,7 @@ function ProductDetailContent() {
 
                         {discountPercent > 0 && (
                           <span className="inline-block px-2.5 py-1 rounded-lg bg-[#F75C03] text-white text-xs font-extrabold">
-                            Promo -{discountPercent}%
+                            {labelDeal || `Promo -${discountPercent}%`}
                           </span>
                         )}
                       </div>
@@ -712,8 +727,12 @@ function ProductDetailContent() {
                     {/* Harga Utama & Deretan Chip Kepercayaan */}
                     <div className="space-y-3 pb-4 border-b border-slate-100">
                       <div className="flex items-baseline flex-wrap gap-2.5">
-                        <span className="font-heading text-2xl sm:text-3xl font-extrabold text-[#4737FF]">
-                          {formatRupiah(product.hargaEceran)}
+                        <span
+                          className={`font-heading text-2xl sm:text-3xl font-extrabold ${
+                            originalPrice ? 'text-[#F75C03]' : 'text-[#4737FF]'
+                          }`}
+                        >
+                          {formatRupiah(finalPrice || product.hargaEceran)}
                         </span>
                         {originalPrice && (
                           <span className="text-sm text-slate-400 line-through font-semibold">

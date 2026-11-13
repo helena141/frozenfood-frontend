@@ -35,42 +35,39 @@ export function formatGramLabel(rawBerat: number | undefined | null): string {
 export function extractProductPromo(
   product: ProductCatalogResponse,
   overridePercent?: number
-): { discountPercent: number; originalPrice: number | null } {
-  const raw = product as unknown as Record<string, unknown>;
-  const apiDiscount =
-    typeof raw.diskonPersen === 'number'
-      ? raw.diskonPersen
-      : typeof raw.discountPercent === 'number'
-        ? raw.discountPercent
-        : 0;
-
-  const discountPercent = overridePercent ?? apiDiscount;
-
-  const apiOriginalPrice =
-    typeof raw.hargaCoret === 'number' && raw.hargaCoret > product.hargaEceran
-      ? raw.hargaCoret
-      : typeof raw.hargaAsli === 'number' && raw.hargaAsli > product.hargaEceran
-        ? raw.hargaAsli
+): {
+  discountPercent: number;
+  originalPrice: number | null;
+  finalPrice: number;
+  labelDeal: string | null;
+} {
+  const dealPrice =
+    typeof product.hargaClearance === 'number' && product.hargaClearance > 0
+      ? product.hargaClearance
+      : typeof product.hargaSetelahDiskon === 'number' &&
+          product.hargaSetelahDiskon > 0
+        ? product.hargaSetelahDiskon
         : null;
 
-  if (apiOriginalPrice) {
-    const calculatedPct = Math.round(
-      ((apiOriginalPrice - product.hargaEceran) / apiOriginalPrice) * 100
-    );
+  if (product.isClearance && dealPrice !== null && dealPrice < product.hargaEceran) {
+    const pct =
+      typeof product.diskonPersen === 'number' && product.diskonPersen > 0
+        ? product.diskonPersen
+        : overridePercent ?? 0;
     return {
-      discountPercent: discountPercent > 0 ? discountPercent : calculatedPct,
-      originalPrice: apiOriginalPrice,
+      discountPercent: pct,
+      originalPrice: product.hargaEceran,
+      finalPrice: dealPrice,
+      labelDeal: product.labelDeal || null,
     };
   }
 
-  if (discountPercent > 0 && discountPercent < 90) {
-    const originalPrice = Math.round(
-      product.hargaEceran / (1 - discountPercent / 100)
-    );
-    return { discountPercent, originalPrice };
-  }
-
-  return { discountPercent: 0, originalPrice: null };
+  return {
+    discountPercent: 0,
+    originalPrice: null,
+    finalPrice: product.hargaEceran,
+    labelDeal: null,
+  };
 }
 
 export default function ProductCard({
@@ -89,10 +86,8 @@ export default function ProductCard({
   const isLowStock = !isOutOfStock && explicitStock && stock <= 10;
   const isB2B = user?.tipeAkun === 'B2B';
 
-  const { discountPercent, originalPrice } = extractProductPromo(
-    product,
-    promoPercent
-  );
+  const { discountPercent, originalPrice, finalPrice, labelDeal } =
+    extractProductPromo(product, promoPercent);
 
   const handleAddToCart = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -143,7 +138,7 @@ export default function ProductCard({
               </span>
             ) : discountPercent > 0 ? (
               <span className="px-2 py-0.5 rounded-lg bg-[#F75C03] text-white text-[10px] font-extrabold shadow-2xs">
-                Promo -{discountPercent}%
+                {labelDeal || `Promo -${discountPercent}%`}
               </span>
             ) : isLowStock ? (
               <span className="px-2 py-0.5 rounded-lg bg-[#F75C03] text-white text-[10px] font-bold shadow-2xs">
@@ -202,8 +197,12 @@ export default function ProductCard({
                 Harga satuan
               </span>
             )}
-            <span className="font-heading text-base font-extrabold text-[#4737FF] block truncate">
-              {formatRupiah(product.hargaEceran)}
+            <span
+              className={`font-heading text-base font-extrabold block truncate ${
+                originalPrice ? 'text-[#F75C03]' : 'text-[#4737FF]'
+              }`}
+            >
+              {formatRupiah(finalPrice)}
             </span>
           </div>
 

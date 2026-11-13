@@ -23,6 +23,24 @@ export interface AuthResponse {
   tipeAkun: TipeAkun;
 }
 
+export interface TieringPriceItem {
+  idTiering: string;
+  minQty: number;
+  maxQty: number;
+  hargaPerUnit: number;
+}
+
+export interface BatchCatalogItem {
+  idProdBatch: string;
+  stokOnline: number;
+  tanggalExp: string;
+  sisaHariExpired: number;
+  hargaEfektif: number;
+  diskonPersen: number;
+  isDeal: boolean;
+  labelDeal: string | null;
+}
+
 // === PRODUK (KATALOG & CRUD) DTO ===
 export interface ProductCatalogResponse {
   idProduk: string;
@@ -36,8 +54,34 @@ export interface ProductCatalogResponse {
   isActive: boolean;
   totalStock?: number;
   totalStokOnline?: number;
+  isClearance?: boolean;
+  stokClearance?: number;
+  hargaClearance?: number | null;
+  hargaSetelahDiskon?: number | null;
+  diskonPersen?: number;
+  sisaHariExpired?: number | null;
+  tipeDeal?: 'CLEARANCE' | 'FEFO_DEAL' | 'PROMO_BATCH' | string | null;
+  labelDeal?: string | null;
+  nearestExpDate?: string | null;
+  tieringPrices?: TieringPriceItem[];
+  activeBatches?: BatchCatalogItem[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface ExpiryAlertResponse {
+  idAlert: string;
+  idProdBatch: string;
+  idProduk: string;
+  namaProduk: string;
+  tanggalExp: string;
+  stokOnline: number;
+  hargaEceran: number;
+  hargaOverride: number | null;
+  diskon: number | null;
+  pesan: string;
+  isResolved: boolean;
+  createdAt: string;
 }
 
 // === INVENTORI BATCH FEFO DTO ===
@@ -116,7 +160,10 @@ export interface OrderItemResponse {
   namaProduk: string;
   idProdBatch: string;
   quantity: number;
+  hargaAsli?: number;
   hargaSatuanSnapshot: number;
+  diskonPersen?: number;
+  keteranganPromo?: string;
   subtotalItem: number;
 }
 

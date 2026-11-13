@@ -187,47 +187,47 @@ export default function HomePage() {
   }, [activeProducts]);
 
   /**
-   * Seleksi Produk FEFO Flash Food Deals:
-   * - Mendukung field asli dari backend jika tersedia (diskonPersen / hargaSetelahDiskon / sisaHariExpired)
-   * - Jika backend belum mengirimkannya di GET /api/products, otomatis menghitung harga diskon KE BAWAH
-   *   dari hargaEceran asli (misal Rp 45.000 diskon 20% -> Harga Deal Rp 36.000, Hemat Rp 9.000)
+   * Seleksi Produk FEFO Flash Food Deals (Murni dari Database Backend):
+   * - Memfilter produk yang memiliki batch mendekati kedaluwarsa (<= 30 hari: FEFO Deal 20% & <= 7 hari: Clearance 50%)
+   *   atau batch yang memiliki diskon/hargaOverride aktif (isClearance === true).
+   * - Seluruh harga diskon dan persentase diambil langsung dari perhitungan Backend (tanpa karangan di Frontend).
    */
   const fefoDealProducts = useMemo(() => {
-    const available = activeProducts.filter((p) => getProductStock(p) > 0);
-    const sorted = [...available].sort(
-      (a, b) => getProductStock(a) - getProductStock(b)
-    );
+    const dealCandidates = activeProducts.filter((p) => {
+      const dealPrice = p.hargaClearance ?? p.hargaSetelahDiskon ?? null;
+      return (
+        p.isClearance === true &&
+        getProductStock(p) > 0 &&
+        typeof dealPrice === 'number' &&
+        dealPrice > 0 &&
+        dealPrice < p.hargaEceran
+      );
+    });
 
-    return sorted.slice(0, 4).map((product, idx) => {
-      const raw = product as unknown as Record<string, unknown>;
-      const stock = getProductStock(product);
+    const sorted = [...dealCandidates].sort((a, b) => {
+      const daysA =
+        typeof a.sisaHariExpired === 'number' ? a.sisaHariExpired : 999;
+      const daysB =
+        typeof b.sisaHariExpired === 'number' ? b.sisaHariExpired : 999;
+      return daysA - daysB;
+    });
 
-      const apiDaysLeft =
-        typeof raw.sisaHariExpired === 'number' && raw.sisaHariExpired > 0
-          ? raw.sisaHariExpired
-          : null;
-      const daysLeft = apiDaysLeft ?? (((idx + 1) * 2) % 5) + 3;
-
-      const apiDiscountPct =
-        typeof raw.diskonPersen === 'number' && raw.diskonPersen > 0
-          ? raw.diskonPersen
-          : typeof raw.diskonFefoPersen === 'number' && raw.diskonFefoPersen > 0
-            ? raw.diskonFefoPersen
-            : null;
-      const discountPct = apiDiscountPct ?? (idx % 2 === 0 ? 20 : 15);
-
-      const originalPrice =
-        typeof raw.hargaAsli === 'number' && raw.hargaAsli > 0
-          ? raw.hargaAsli
-          : product.hargaEceran;
-
+    return sorted.slice(0, 8).map((product) => {
+      const stock =
+        typeof product.stokClearance === 'number' && product.stokClearance > 0
+          ? product.stokClearance
+          : getProductStock(product);
+      const daysLeft =
+        typeof product.sisaHariExpired === 'number'
+          ? product.sisaHariExpired
+          : 0;
+      const originalPrice = product.hargaEceran;
       const discountedPrice =
-        typeof raw.hargaSetelahDiskon === 'number' &&
-        raw.hargaSetelahDiskon > 0 &&
-        raw.hargaSetelahDiskon < originalPrice
-          ? raw.hargaSetelahDiskon
-          : Math.round((originalPrice * (100 - discountPct)) / 100);
-
+        product.hargaClearance ??
+        product.hargaSetelahDiskon ??
+        product.hargaEceran;
+      const discountPct =
+        typeof product.diskonPersen === 'number' ? product.diskonPersen : 0;
       const savedAmount = Math.max(0, originalPrice - discountedPrice);
 
       return {
@@ -263,19 +263,10 @@ export default function HomePage() {
     });
   }, [activeProducts, selectedCategory, searchQuery, onlyAvailable]);
 
-  // Saat klik "+ Ambil Deal", masukkan produk ke keranjang dengan harga yang sudah didiskon
-  const handleQuickAddDeal = (
-    product: ProductCatalogResponse,
-    discountedPrice: number
-  ) => {
+  // Saat klik "+ Ambil Deal", masukkan produk ke keranjang (keranjang otomatis membaca data deal FEFO dari backend)
+  const handleQuickAddDeal = (product: ProductCatalogResponse) => {
     if (getProductStock(product) <= 0) return;
-    addItem(
-      {
-        ...product,
-        hargaEceran: discountedPrice,
-      },
-      1
-    );
+    addItem(product, 1);
     setAddedDealId(product.idProduk);
     setTimeout(() => setAddedDealId(null), 1300);
   };
@@ -514,7 +505,7 @@ export default function HomePage() {
                       <span>BIG DEALS • FEFO FLASH SALE</span>
                     </div>
                     <h2 className="font-heading text-lg sm:text-2xl font-extrabold text-white tracking-tight">
-                      Penawaran Batch Mendekati Masa Rotasi (Diskon Langsung s/d 20%)
+                      Penawaran Batch Prioritas FEFO (H-30 Diskon 20% • Clearance H-7 Diskon 50%)
                     </h2>
                     <p className="text-xs text-white/90 max-w-2xl leading-relaxed">
                       Produk prioritas sistem{' '}
@@ -672,9 +663,7 @@ export default function HomePage() {
 
                               <button
                                 type="button"
-                                onClick={() =>
-                                  handleQuickAddDeal(product, discountedPrice)
-                                }
+                                onClick={() => handleQuickAddDeal(product)}
                                 className={`px-3.5 py-2.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 shadow-xs ${
                                   isAdded
                                     ? 'bg-[#159A68] text-white'

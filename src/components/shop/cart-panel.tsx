@@ -11,11 +11,24 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useCartStore } from '@/store/cart-store';
-import { formatRupiah, getProductStock } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth-store';
+import {
+  evaluateCartItemPricing,
+  formatRupiah,
+  getProductStock,
+} from '@/lib/utils';
 
 export default function CartPanel() {
-  const { items, updateQty, removeItem, getTotalItems, getSubtotal } =
-    useCartStore();
+  const {
+    items,
+    updateQty,
+    removeItem,
+    getTotalItems,
+    getSubtotal,
+    getOriginalSubtotal,
+    getTotalSaved,
+  } = useCartStore();
+  const user = useAuthStore((state) => state.user);
 
   const [mounted, setMounted] = useState(false);
 
@@ -25,7 +38,9 @@ export default function CartPanel() {
 
   const displayItems = mounted ? items : [];
   const totalItems = mounted ? getTotalItems() : 0;
-  const subtotal = mounted ? getSubtotal() : 0;
+  const subtotal = mounted ? getSubtotal(user?.tipeAkun) : 0;
+  const originalSubtotal = mounted ? getOriginalSubtotal() : 0;
+  const totalSaved = mounted ? getTotalSaved(user?.tipeAkun) : 0;
 
   return (
     <aside className="lezzat-cart hidden xl:flex xl:flex-col xl:w-[310px] shrink-0 bg-white border-l border-[#E6E8F0] p-5 h-screen sticky top-0 justify-between">
@@ -65,6 +80,11 @@ export default function CartPanel() {
             {displayItems.map(({ product, qty }) => {
               const safeQty = Number.isNaN(qty) || qty < 1 ? 1 : qty;
               const maxStock = Math.max(getProductStock(product), safeQty);
+              const pricing = evaluateCartItemPricing(
+                product,
+                safeQty,
+                user?.tipeAkun
+              );
 
               return (
                 <div
@@ -99,9 +119,27 @@ export default function CartPanel() {
                       </button>
                     </div>
 
-                    <p className="text-xs font-extrabold text-[#4737FF] mt-0.5 mb-2">
-                      {formatRupiah(product.hargaEceran)}
-                    </p>
+                    {pricing.hasDiscount ? (
+                      <div className="mt-0.5 mb-2 space-y-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] text-[#77788A] line-through">
+                            {formatRupiah(pricing.originalUnitPrice)}
+                          </span>
+                          <span className="text-xs font-extrabold text-[#F75C03]">
+                            {formatRupiah(pricing.effectiveUnitPrice)}
+                          </span>
+                        </div>
+                        {pricing.primaryPromoLabel && (
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-[#F75C03]/15 text-[#D93800] text-[9px] font-extrabold">
+                            {pricing.primaryPromoLabel}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs font-extrabold text-[#4737FF] mt-0.5 mb-2">
+                        {formatRupiah(product.hargaEceran)}
+                      </p>
+                    )}
 
                     {/* Tombol Kuantitas (- 1 +) */}
                     <div className="inline-flex items-center gap-2.5 rounded-lg bg-white border border-[#E6E8F0] px-2 py-1">
@@ -137,6 +175,20 @@ export default function CartPanel() {
       {/* Ringkasan & Tombol Checkout */}
       <div className="pt-4 border-t border-[#E6E8F0] mt-4">
         <div className="space-y-2 text-xs mb-4">
+          {totalSaved > 0 && (
+            <>
+              <div className="flex justify-between text-[#77788A]">
+                <span>Harga Normal</span>
+                <span className="line-through">
+                  {formatRupiah(originalSubtotal)}
+                </span>
+              </div>
+              <div className="flex justify-between text-[#159A68] font-bold">
+                <span>Hemat Diskon / Tier</span>
+                <span>- {formatRupiah(totalSaved)}</span>
+              </div>
+            </>
+          )}
           <div className="flex justify-between text-[#77788A]">
             <span>Subtotal</span>
             <span className="font-semibold text-[#171725]">

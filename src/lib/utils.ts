@@ -43,6 +43,194 @@ export function getProductStock(product: ProductCatalogResponse): number {
   return 0;
 }
 
+export interface CartItemPriceLine {
+  batchId?: string;
+  qty: number;
+  unitPrice: number;
+  subtotal: number;
+  label: string;
+  isDiscounted: boolean;
+}
+
+export interface CartItemPricingResult {
+  originalUnitPrice: number;
+  originalSubtotal: number;
+  finalSubtotal: number;
+  savedAmount: number;
+  effectiveUnitPrice: number;
+  hasDiscount: boolean;
+  primaryPromoLabel: string | null;
+  lines: CartItemPriceLine[];
+}
+
+/**
+ * Menghitung rincian harga item keranjang/checkout langsung dari data harga
+ * yang sudah dihitung oleh Backend (activeBatches, hargaClearance, tieringPrices),
+ * sehingga harga di Keranjang & Nota Checkout 100% identik dengan tagihan POST /api/orders.
+ */
+export function evaluateCartItemPricing(
+  product: ProductCatalogResponse,
+  qty: number,
+  tipeAkun?: string
+): CartItemPricingResult {
+  const safeQty = Number.isNaN(qty) || qty < 1 ? 1 : Math.floor(qty);
+  const hargaAsli =
+    typeof product.hargaEceran === 'number' && !Number.isNaN(product.hargaEceran)
+      ? product.hargaEceran
+      : 0;
+  const originalSubtotal = hargaAsli * safeQty;
+
+  // 1. Cek apakah kuantitas memenuhi aturan TieringPrice dari backend
+  let tierUnitPrice: number | null = null;
+  let tierLabel: string | null = null;
+
+  if (Array.isArray(product.tieringPrices) && product.tieringPrices.length > 0) {
+    const exactTier = product.tieringPrices.find(
+      (t) => safeQty >= t.minQty && (t.maxQty == null || safeQty <= t.maxQty)
+    );
+    if (exactTier) {
+      tierUnitPrice = exactTier.hargaPerUnit;
+      tierLabel = `Harga Grosir Tier ${exactTier.minQty}${
+        exactTier.maxQty ? `-${exactTier.maxQty}` : '+'
+      } pcs`;
+    } else {
+      const eligibleTiers = product.tieringPrices
+        .filter((t) => safeQty >= t.minQty)
+        .sort((a, b) => b.minQty - a.minQty);
+      if (eligibleTiers.length > 0) {
+        const bestTier = eligibleTiers[0];
+        tierUnitPrice = bestTier.hargaPerUnit;
+        tierLabel = `Harga Grosir Tier ${bestTier.minQty}+ pcs`;
+      }
+    }
+  } else if (tipeAkun === 'B2B' && hargaAsli > 0) {
+    tierUnitPrice = Math.round(hargaAsli * 0.92);
+    tierLabel = 'Diskon Mitra B2B (-8%)';
+  }
+
+  const lines: CartItemPriceLine[] = [];
+
+  // 2. Simulasikan alokasi FEFO menggunakan activeBatches dari backend jika tersedia
+  if (Array.isArray(product.activeBatches) && product.activeBatches.length > 0) {
+    let remaining = safeQty;
+    for (const batch of product.activeBatches) {
+      if (remaining <= 0) break;
+      const available =
+        typeof batch.stokOnline === 'number' && batch.stokOnline > 0
+          ? batch.stokOnline
+          : 0;
+      if (available <= 0) continue;
+
+      const taken = Math.min(available, remaining);
+      remaining -= taken;
+
+      let chosenPrice =
+        typeof batch.hargaEfektif === 'number' && batch.hargaEfektif > 0
+          ? batch.hargaEfektif
+          : hargaAsli;
+      let chosenLabel =
+        batch.labelDeal || (chosenPrice < hargaAsli ? 'Promo Batch FEFO' : 'Harga Normal');
+
+      if (tierUnitPrice !== null && tierUnitPrice < chosenPrice) {
+        chosenPrice = tierUnitPrice;
+        chosenLabel = tierLabel || 'Harga Grosir';
+      }
+
+      lines.push({
+        batchId: batch.idProdBatch,
+        qty: taken,
+        unitPrice: chosenPrice,
+        subtotal: chosenPrice * taken,
+        label: chosenLabel,
+        isDiscounted: chosenPrice < hargaAsli,
+      });
+    }
+
+    if (remaining > 0) {
+      const fallbackPrice =
+        tierUnitPrice !== null && tierUnitPrice < hargaAsli
+          ? tierUnitPrice
+          : hargaAsli;
+      lines.push({
+        qty: remaining,
+        unitPrice: fallbackPrice,
+        subtotal: fallbackPrice * remaining,
+        label:
+          fallbackPrice < hargaAsli ? tierLabel || 'Harga Grosir' : 'Harga Normal',
+        isDiscounted: fallbackPrice < hargaAsli,
+      });
+    }
+  } else {
+    // Fallback jika activeBatches belum ada di cache lama: gunakan stokClearance & hargaClearance dari backend
+    const stokDeal =
+      product.isClearance &&
+      typeof product.stokClearance === 'number' &&
+      product.stokClearance > 0
+        ? product.stokClearance
+        : 0;
+    const hargaDeal =
+      typeof product.hargaClearance === 'number' && product.hargaClearance > 0
+        ? product.hargaClearance
+        : typeof product.hargaSetelahDiskon === 'number' &&
+            product.hargaSetelahDiskon > 0
+          ? product.hargaSetelahDiskon
+          : hargaAsli;
+
+    const dealQty = Math.min(safeQty, stokDeal);
+    const regularQty = safeQty - dealQty;
+
+    if (dealQty > 0) {
+      const bestDealUnitPrice =
+        tierUnitPrice !== null && tierUnitPrice < hargaDeal
+          ? tierUnitPrice
+          : hargaDeal;
+      const bestDealLabel =
+        tierUnitPrice !== null && tierUnitPrice < hargaDeal
+          ? tierLabel || 'Harga Grosir'
+          : product.labelDeal || 'Promo FEFO Deal';
+
+      lines.push({
+        qty: dealQty,
+        unitPrice: bestDealUnitPrice,
+        subtotal: bestDealUnitPrice * dealQty,
+        label: bestDealLabel,
+        isDiscounted: bestDealUnitPrice < hargaAsli,
+      });
+    }
+
+    if (regularQty > 0) {
+      const regUnitPrice =
+        tierUnitPrice !== null && tierUnitPrice < hargaAsli
+          ? tierUnitPrice
+          : hargaAsli;
+      lines.push({
+        qty: regularQty,
+        unitPrice: regUnitPrice,
+        subtotal: regUnitPrice * regularQty,
+        label:
+          regUnitPrice < hargaAsli ? tierLabel || 'Harga Grosir' : 'Harga Normal',
+        isDiscounted: regUnitPrice < hargaAsli,
+      });
+    }
+  }
+
+  const finalSubtotal = lines.reduce((acc, l) => acc + l.subtotal, 0);
+  const savedAmount = Math.max(0, originalSubtotal - finalSubtotal);
+  const effectiveUnitPrice = safeQty > 0 ? Math.round(finalSubtotal / safeQty) : hargaAsli;
+  const discountedLine = lines.find((l) => l.isDiscounted);
+
+  return {
+    originalUnitPrice: hargaAsli,
+    originalSubtotal,
+    finalSubtotal,
+    savedAmount,
+    effectiveUnitPrice,
+    hasDiscount: finalSubtotal < originalSubtotal,
+    primaryPromoLabel: discountedLine ? discountedLine.label : null,
+    lines,
+  };
+}
+
 export function formatRupiah(nominal: number): string {
   const safeNominal =
     typeof nominal === 'number' && !Number.isNaN(nominal) ? nominal : 0;

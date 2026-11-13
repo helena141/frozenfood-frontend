@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { ProductCatalogResponse } from '@/types/api';
-import { getProductStock } from '@/lib/utils';
+import { evaluateCartItemPricing, getProductStock } from '@/lib/utils';
 
 export interface CartItem {
   product: ProductCatalogResponse;
@@ -15,7 +15,9 @@ interface CartState {
   removeItem: (idProduk: string) => void;
   clearCart: () => void;
   getTotalItems: () => number;
-  getSubtotal: () => number;
+  getSubtotal: (tipeAkun?: string) => number;
+  getOriginalSubtotal: () => number;
+  getTotalSaved: (tipeAkun?: string) => number;
 }
 
 export const useCartStore = create<CartState>()(
@@ -79,13 +81,28 @@ export const useCartStore = create<CartState>()(
           (sum, item) => sum + (isNaN(item.qty) ? 1 : item.qty),
           0
         ),
-      getSubtotal: () =>
+      getSubtotal: (tipeAkun) =>
         get().items.reduce((total, item) => {
-          const safeQty = isNaN(item.qty) ? 1 : item.qty;
-          const safePrice = isNaN(item.product.hargaEceran)
-            ? 0
-            : item.product.hargaEceran;
-          return total + safePrice * safeQty;
+          const evalPrice = evaluateCartItemPricing(
+            item.product,
+            item.qty,
+            tipeAkun
+          );
+          return total + evalPrice.finalSubtotal;
+        }, 0),
+      getOriginalSubtotal: () =>
+        get().items.reduce((total, item) => {
+          const evalPrice = evaluateCartItemPricing(item.product, item.qty);
+          return total + evalPrice.originalSubtotal;
+        }, 0),
+      getTotalSaved: (tipeAkun) =>
+        get().items.reduce((total, item) => {
+          const evalPrice = evaluateCartItemPricing(
+            item.product,
+            item.qty,
+            tipeAkun
+          );
+          return total + evalPrice.savedAmount;
         }, 0),
     }),
     {
