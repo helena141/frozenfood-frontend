@@ -15,11 +15,26 @@ import {
   Layers,
   ArrowRight,
 } from 'lucide-react';
+import { api } from '@/lib/axios';
 import { ProductCatalogResponse } from '@/types/api';
 import { formatRupiah } from '@/lib/utils';
 
 interface HeroCarouselProps {
   featuredProducts?: ProductCatalogResponse[];
+}
+
+function getFullImageUrl(rawUrl?: string | null): string | null {
+  if (!rawUrl || rawUrl.trim() === '') return null;
+  const trimmed = rawUrl.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  const baseUrl = (
+    api.defaults.baseURL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:8080'
+  ).replace(/\/+$/, '');
+  return `${baseUrl}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
 }
 
 const SLIDES = [
@@ -124,7 +139,6 @@ export default function HeroCarousel({
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
-      {/* Area Utama Carousel yang Ringkas */}
       <div className="relative ff-hero-gradient text-white p-4 sm:p-6 overflow-hidden">
         <div className="relative overflow-hidden">
           <div
@@ -138,7 +152,8 @@ export default function HeroCarousel({
                 ] ||
                 featuredProducts[idx % Math.max(1, featuredProducts.length)];
 
-              const displayImg = matchedProduct?.gambar || slide.fallbackImg;
+              const resolvedImg = getFullImageUrl(matchedProduct?.gambar);
+              const displayImg = resolvedImg || slide.fallbackImg;
               const displayTitle =
                 matchedProduct?.namaProduk ||
                 'Koleksi Bakso, Dimsum & Nugget Premium';
@@ -151,7 +166,6 @@ export default function HeroCarousel({
                   key={slide.id}
                   className="w-full shrink-0 grid grid-cols-1 lg:grid-cols-12 gap-5 items-center"
                 >
-                  {/* Kolom Kiri: Copywriting Ringkas */}
                   <div className="lg:col-span-7 space-y-3">
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/15 text-[10px] font-bold tracking-wider uppercase">
                       <Sparkles className="w-3 h-3 text-[#F75C03] shrink-0" />
@@ -211,10 +225,9 @@ export default function HeroCarousel({
                     </div>
                   </div>
 
-                  {/* Kolom Kanan: Kartu Sorotan Katalog Ringkas (Tanpa Frame Bertumpuk) */}
                   <div className="lg:col-span-5">
                     <div className="rounded-xl bg-white/15 backdrop-blur-xs p-3">
-                      <div className="aspect-video rounded-lg overflow-hidden bg-slate-100 relative">
+                      <div className="aspect-[16/9] rounded-lg overflow-hidden bg-slate-100 relative">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={displayImg}
@@ -260,7 +273,6 @@ export default function HeroCarousel({
           </div>
         </div>
 
-        {/* Navigasi Slide */}
         <div className="mt-4 pt-3 border-t border-white/15 flex items-center justify-between gap-4">
           <div className="flex items-center gap-1.5">
             {SLIDES.map((s, idx) => (
@@ -302,7 +314,6 @@ export default function HeroCarousel({
         </div>
       </div>
 
-      {/* Running Marquee Ticker Terang (Slate-50, Tanpa Hitam) */}
       <div className="bg-slate-50 text-slate-600 py-2 border-t border-slate-200 overflow-hidden">
         <div className="ff-marquee-track">
           {[...MARQUEE_ITEMS, ...MARQUEE_ITEMS].map((item, idx) => (

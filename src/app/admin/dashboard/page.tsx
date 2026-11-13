@@ -19,6 +19,8 @@ import { api } from '@/lib/axios';
 import { formatRupiah, getErrorMessage } from '@/lib/utils';
 import { ReportResponse, LaporanPenjualanResponse } from '@/types/api';
 import AdminSidebar from '@/components/admin/admin-sidebar';
+import ExpiryAlertPanel from '@/components/admin/expiry-alert-panel';
+import AdminOrderAlert from '@/components/admin/admin-order-alert';
 
 function toYmdLocal(date: Date): string {
   const yyyy = date.getFullYear();
@@ -183,6 +185,14 @@ export default function AdminDashboardPage() {
             <RefreshCw className="w-3.5 h-3.5 text-[#4737FF]" />
             <span>Muat Ulang Data</span>
           </button>
+        </div>
+
+        {/* 1. Notifikasi Suara Pesanan Baru & Konfirmasi Ongkir Pihak Ketiga */}
+        <AdminOrderAlert />
+
+        {/* 2. Panel Peringatan Kedaluwarsa Batch FEFO (Hanya 1x, Tidak Duplikat) */}
+        <div className="mb-6">
+          <ExpiryAlertPanel />
         </div>
 
         {/* Catatan Sistem */}

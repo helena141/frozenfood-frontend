@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -16,6 +16,7 @@ import {
   ExternalLink,
   X,
   AlertTriangle,
+  Search,
 } from 'lucide-react';
 import { api } from '@/lib/axios';
 import {
@@ -25,6 +26,7 @@ import {
 } from '@/lib/utils';
 import { DeliveryListResponse, DeliveryResponse } from '@/types/api';
 import AdminSidebar from '@/components/admin/admin-sidebar';
+import AdminOrderAlert from '@/components/admin/admin-order-alert';
 
 const STATUS_TABS = [
   { key: '', label: 'Semua Status' },
@@ -39,6 +41,12 @@ const STATUS_TABS = [
   { key: 'GAGAL_KIRIM', label: 'Gagal Kirim' },
   { key: 'DIBATALKAN', label: 'Dibatalkan' },
 ];
+
+const PELAKSANA_FILTERS = [
+  { key: 'ALL', label: 'Semua Pelaksana' },
+  { key: 'MOTOR_TOKO', label: 'Motor Toko' },
+  { key: 'PIHAK_KETIGA', label: 'Pihak Ketiga' },
+] as const;
 
 function getAllowedNextStatuses(currentStatus: string): string[] {
   switch (currentStatus) {
@@ -118,6 +126,8 @@ function isEstimateOverdue(
 
 export default function AdminDeliveriesPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [pelaksanaFilter, setPelaksanaFilter] = useState<string>('ALL');
   const [page, setPage] = useState<number>(0);
   const [size] = useState<number>(10);
   const [todayYmd, setTodayYmd] = useState<string>('');
@@ -159,12 +169,12 @@ export default function AdminDeliveriesPage() {
   }, []);
 
   const {
-    data: deliveryPage,
+    data: rawDeliveryData,
     isLoading,
     isError,
     error,
     refetch,
-  } = useQuery<DeliveryListResponse>({
+  } = useQuery<DeliveryListResponse | DeliveryResponse[]>({
     queryKey: ['admin-deliveries', selectedStatus, page, size],
     queryFn: async () => {
       const params: Record<string, string | number> = { page, size };
@@ -176,27 +186,96 @@ export default function AdminDeliveriesPage() {
         '/api/deliveries',
         { params }
       );
-      const raw = res.data;
-      if (Array.isArray(raw)) {
-        const filtered = selectedStatus
-          ? raw.filter((d) => d.statusDelivery === selectedStatus)
-          : raw;
-        const start = page * size;
-        return {
-          content: filtered.slice(start, start + size),
-          page,
-          size,
-          totalElements: filtered.length,
-          totalPages: Math.max(1, Math.ceil(filtered.length / size)),
-        };
-      }
-      return raw;
+      return res.data;
     },
   });
 
-  const deliveries = deliveryPage?.content || [];
-  const totalPages = deliveryPage?.totalPages || 0;
-  const totalElements = deliveryPage?.totalElements || 0;
+  const deliveryPage = useMemo<DeliveryListResponse>(() => {
+    const q = searchQuery.trim().toLowerCase();
+
+    const matchesFilter = (d: DeliveryResponse) => {
+      if (selectedStatus && d.statusDelivery !== selectedStatus) {
+        return false;
+      }
+      if (
+        pelaksanaFilter !== 'ALL' &&
+        (d.pelaksana || '').toUpperCase() !== pelaksanaFilter
+      ) {
+        return false;
+      }
+      if (!q) return true;
+
+      const idOrder = String(d.idOrder || '').toLowerCase();
+      const idDelivery = String(d.idDelivery || '').toLowerCase();
+      const alamat = String(d.alamatTujuan || '').toLowerCase();
+      const pengantar = String(
+        d.namaPengantar?.trim()
+          ? d.namaPengantar
+          : d.pelaksana === 'MOTOR_TOKO'
+            ? 'Karyawan toko'
+            : ''
+      ).toLowerCase();
+      const pelaksana = String(d.pelaksana || '').toLowerCase();
+      const metode = String(d.metodeDeliv || '').toLowerCase();
+      const status = String(d.statusDelivery || '').toLowerCase();
+      const sumber = String(d.sumberJarak || '').toLowerCase();
+
+      return (
+        idOrder.includes(q) ||
+        idDelivery.includes(q) ||
+        alamat.includes(q) ||
+        pengantar.includes(q) ||
+        pelaksana.includes(q) ||
+        metode.includes(q) ||
+        status.includes(q) ||
+        sumber.includes(q)
+      );
+    };
+
+    if (!rawDeliveryData) {
+      return {
+        content: [],
+        page,
+        size,
+        totalElements: 0,
+        totalPages: 0,
+      };
+    }
+
+    if (Array.isArray(rawDeliveryData)) {
+      const filtered = rawDeliveryData.filter(matchesFilter);
+      const start = page * size;
+      return {
+        content: filtered.slice(start, start + size),
+        page,
+        size,
+        totalElements: filtered.length,
+        totalPages: Math.max(1, Math.ceil(filtered.length / size)),
+      };
+    }
+
+    const baseContent = Array.isArray(rawDeliveryData.content)
+      ? rawDeliveryData.content
+      : [];
+    const filteredContent = baseContent.filter(matchesFilter);
+    const isClientFiltered = Boolean(q) || pelaksanaFilter !== 'ALL';
+
+    return {
+      content: filteredContent,
+      page: rawDeliveryData.page ?? page,
+      size: rawDeliveryData.size ?? size,
+      totalElements: isClientFiltered
+        ? filteredContent.length
+        : (rawDeliveryData.totalElements ?? filteredContent.length),
+      totalPages: isClientFiltered
+        ? Math.max(1, Math.ceil(filteredContent.length / size))
+        : (rawDeliveryData.totalPages ?? 1),
+    };
+  }, [rawDeliveryData, selectedStatus, pelaksanaFilter, searchQuery, page, size]);
+
+  const deliveries = deliveryPage.content || [];
+  const totalPages = deliveryPage.totalPages || 0;
+  const totalElements = deliveryPage.totalElements || 0;
 
   const executeUpdateStatus = async (
     delivery: DeliveryResponse,
@@ -334,6 +413,11 @@ export default function AdminDeliveriesPage() {
     }
   };
 
+  const hasActiveFilter =
+    Boolean(searchQuery.trim()) ||
+    pelaksanaFilter !== 'ALL' ||
+    Boolean(selectedStatus);
+
   return (
     <div className="lezzat-shell">
       <AdminSidebar />
@@ -360,6 +444,9 @@ export default function AdminDeliveriesPage() {
           </button>
         </div>
 
+        {/* Notifikasi Suara & Alert Pesanan Masuk / Konfirmasi Ongkir Pihak Ketiga */}
+        <AdminOrderAlert onQuickConfirm={(d) => openConfirmModal(d)} />
+
         {/* Catatan Sistem */}
         <div className="mb-6 flex items-start gap-2.5 rounded-2xl bg-[#E7EFFF] border border-[#D1CDFF] p-3.5 text-xs text-[#171725]">
           <Info className="w-4 h-4 text-[#4737FF] shrink-0 mt-0.5" />
@@ -373,31 +460,100 @@ export default function AdminDeliveriesPage() {
           </span>
         </div>
 
-        {/* Tab Filter Status */}
-        <section className="ff-card p-4 bg-white mb-6">
-          <div className="flex flex-wrap items-center gap-2">
-            {STATUS_TABS.map((tab) => {
-              const isActive = selectedStatus === tab.key;
-              return (
+        {/* Pencarian & Filter Status / Pelaksana */}
+        <section className="ff-card p-4 sm:p-5 bg-white mb-6 space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-xl">
+              <Search className="w-4 h-4 text-[#77788A] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(0);
+                }}
+                placeholder="Cari ID Order (#da64d7bd), alamat tujuan, nama kurir/pengantar, atau metode..."
+                className="w-full rounded-xl border border-[#E6E8F0] bg-[#F8FAFF] focus:bg-white pl-10 pr-9 py-2.5 text-xs text-[#171725] focus:border-[#4737FF] focus:outline-none transition-colors"
+              />
+              {searchQuery && (
                 <button
-                  key={tab.key || 'ALL'}
                   type="button"
                   onClick={() => {
-                    setSelectedStatus(tab.key);
+                    setSearchQuery('');
                     setPage(0);
-                    setActionError(null);
-                    setActionSuccess(null);
                   }}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-[#4737FF] text-white shadow-sm shadow-[#4737FF]/25'
-                      : 'bg-[#F8FAFF] border border-[#E6E8F0] text-[#5E5E6A] hover:border-[#4737FF] hover:text-[#171725]'
-                  }`}
+                  aria-label="Bersihkan pencarian"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#77788A] hover:text-[#171725] cursor-pointer"
                 >
-                  {tab.label}
+                  <X className="w-3.5 h-3.5" />
                 </button>
-              );
-            })}
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {PELAKSANA_FILTERS.map((pf) => {
+                const isActive = pelaksanaFilter === pf.key;
+                return (
+                  <button
+                    key={pf.key}
+                    type="button"
+                    onClick={() => {
+                      setPelaksanaFilter(pf.key);
+                      setPage(0);
+                    }}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-[#171725] text-white'
+                        : 'bg-[#F8FAFF] border border-[#E6E8F0] text-[#5E5E6A] hover:border-[#4737FF] hover:text-[#171725]'
+                    }`}
+                  >
+                    {pf.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[#E6E8F0]">
+            <div className="flex flex-wrap items-center gap-2">
+              {STATUS_TABS.map((tab) => {
+                const isActive = selectedStatus === tab.key;
+                return (
+                  <button
+                    key={tab.key || 'ALL'}
+                    type="button"
+                    onClick={() => {
+                      setSelectedStatus(tab.key);
+                      setPage(0);
+                      setActionError(null);
+                      setActionSuccess(null);
+                    }}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-[#4737FF] text-white shadow-sm shadow-[#4737FF]/25'
+                        : 'bg-[#F8FAFF] border border-[#E6E8F0] text-[#5E5E6A] hover:border-[#4737FF] hover:text-[#171725]'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setPelaksanaFilter('ALL');
+                  setSelectedStatus('');
+                  setPage(0);
+                }}
+                className="text-xs font-bold text-[#4737FF] hover:underline cursor-pointer"
+              >
+                Reset Semua Filter
+              </button>
+            )}
           </div>
         </section>
 
@@ -592,6 +748,9 @@ export default function AdminDeliveriesPage() {
                 <p className="text-xs text-[#77788A]">
                   Menampilkan {deliveries.length} dari total {totalElements}{' '}
                   pengiriman
+                  {searchQuery.trim()
+                    ? ` untuk pencarian "${searchQuery.trim()}"`
+                    : ''}
                 </p>
               </div>
             </div>
@@ -631,12 +790,14 @@ export default function AdminDeliveriesPage() {
             <div className="rounded-2xl bg-[#F8FAFF] p-10 text-center my-2">
               <Truck className="w-10 h-10 text-[#ACA5FF] mx-auto mb-2" />
               <p className="text-sm font-bold text-[#171725] mb-1">
-                Tidak ada data pengiriman
+                Tidak ada data pengiriman yang cocok
               </p>
               <p className="text-xs text-[#77788A]">
-                {selectedStatus
-                  ? `Belum ada pengiriman dengan status ${selectedStatus}.`
-                  : 'Belum ada pengiriman yang tercatat di sistem.'}
+                {searchQuery.trim()
+                  ? `Tidak ditemukan pengiriman dengan kata kunci "${searchQuery}".`
+                  : selectedStatus
+                    ? `Belum ada pengiriman dengan status ${selectedStatus}.`
+                    : 'Belum ada pengiriman yang tercatat di sistem.'}
               </p>
             </div>
           )}

@@ -86,3 +86,91 @@ body {
 .ff-marquee-track:hover {
   animation-play-state: paused;
 }
+@import "tailwindcss";
+
+:root {
+  --ff-primary: #4737ff;
+  --ff-primary-hover: #3529bf;
+  --ff-accent: #f75c03;
+  --ff-accent-hover: #d94800;
+  --ff-success: #159a68;
+  --ff-warning: #d97706;
+  --ff-danger: #e5484d;
+  --ff-bg: #f8fafc;
+  --ff-surface: #ffffff;
+  --ff-border: #e2e8f0;
+  --ff-text: #1e293b;
+  --ff-muted: #64748b;
+}
+
+body {
+  background-color: var(--ff-bg);
+  color: var(--ff-text);
+  font-family: var(--font-jakarta), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-heading,
+.font-serif-title {
+  font-family: var(--font-outfit), var(--font-jakarta), system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.lezzat-shell {
+  min-height: 100vh;
+  display: flex;
+  background-color: #f8fafc;
+  color: #1e293b;
+}
+
+.lezzat-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.25rem 1rem 2.5rem;
+}
+
+@media (min-width: 640px) {
+  .lezzat-main {
+    padding: 1.5rem 1.5rem 3rem;
+  }
+}
+
+.ff-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+}
+
+.ff-card-interactive {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.ff-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px -2px rgba(71, 55, 255, 0.08);
+}
+
+.ff-hero-gradient {
+  background: linear-gradient(135deg, #4737ff 0%, #3529bf 60%, #2b2199 100%);
+}
+
+@keyframes ffMarquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.ff-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: ffMarquee 32s linear infinite;
+}
+
+.ff-marquee-track:hover {
+  animation-play-state: paused;
+}

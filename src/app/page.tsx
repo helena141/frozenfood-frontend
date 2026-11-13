@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -17,7 +17,6 @@ import {
   Clock,
   FileText,
   ArrowRight,
-  Flame,
   Star,
   Sparkles,
   Tag,
@@ -30,6 +29,9 @@ import {
   Quote,
   ThumbsUp,
   Zap,
+  ChevronLeft,
+  ChevronRight,
+  Flame,
 } from 'lucide-react';
 import { api } from '@/lib/axios';
 import { ProductCatalogResponse } from '@/types/api';
@@ -41,6 +43,107 @@ import ProductCard from '@/components/shop/product-card';
 import HeroCarousel from '@/components/shop/hero-carousel';
 import ShopFooter from '@/components/shop/footer';
 import IncompleteProfileBanner from '@/components/auth/incomplete-profile-banner';
+import CustomerAvatar from '@/components/shop/customer-avatar';
+
+interface ProductPromoInfo {
+  isClearance: boolean;
+  discountPercent: number;
+  originalPrice: number | null;
+  effectivePrice: number;
+  stokClearance: number;
+  nearestExpDate: string | null;
+}
+
+const DEALS_MARQUEE_TEXTS = [
+  '🔥 DISKON SPESIAL CLEARANCE H-7 HINGGA 50% & FEFO DEAL H-30 DISKON 20%!',
+  '❄️ 100% TERJAGA BEKU PADA SUHU RANTAI DINGIN -18°C & SIAP MASAK HARI INI',
+  '💸 HARGA PROMO OTOMATIS TERPOTONG DI KERANJANG & SAAT PEMBAYARAN MIDTRANS',
+  '📦 STOK BATCH PROMO TERBATAS — SIAPA CEPAT DIA DAPAT!',
+  '🚚 GRATIS ONGKIR RADIUS ≤ 5 KM DENGAN KURIR TOKO BERINSULASI',
+];
+
+function resolveProductImageUrl(rawUrl?: string | null): string | null {
+  if (!rawUrl || rawUrl.trim() === '') return null;
+  const trimmed = rawUrl.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  const baseUrl = (
+    api.defaults.baseURL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:8080'
+  ).replace(/\/+$/, '');
+  return `${baseUrl}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
+}
+
+function extractProductPromo(
+  product: ProductCatalogResponse,
+  overridePercent?: number
+): ProductPromoInfo {
+  const raw = product as unknown as Record<string, unknown>;
+  const basePrice = Number(product.hargaEceran || 0);
+
+  const isClearance = Boolean(raw.isClearance);
+  const stokClearance =
+    typeof raw.stokClearance === 'number' ? raw.stokClearance : 0;
+  const hargaClearance =
+    typeof raw.hargaClearance === 'number' && raw.hargaClearance > 0
+      ? raw.hargaClearance
+      : null;
+  const nearestExpDate =
+    typeof raw.nearestExpDate === 'string' && raw.nearestExpDate.trim() !== ''
+      ? raw.nearestExpDate.trim()
+      : null;
+
+  if (isClearance && hargaClearance !== null && hargaClearance < basePrice) {
+    const pct = Math.max(
+      1,
+      Math.round(((basePrice - hargaClearance) / basePrice) * 100)
+    );
+    return {
+      isClearance: true,
+      discountPercent: pct,
+      originalPrice: basePrice,
+      effectivePrice: hargaClearance,
+      stokClearance,
+      nearestExpDate,
+    };
+  }
+
+  if (isClearance) {
+    const pct = overridePercent ?? 50;
+    const calculatedClearance = Math.round((basePrice * (100 - pct)) / 100);
+    return {
+      isClearance: true,
+      discountPercent: pct,
+      originalPrice: basePrice,
+      effectivePrice: calculatedClearance,
+      stokClearance,
+      nearestExpDate,
+    };
+  }
+
+  if (overridePercent && overridePercent > 0 && overridePercent < 90) {
+    const discounted = Math.round((basePrice * (100 - overridePercent)) / 100);
+    return {
+      isClearance: false,
+      discountPercent: overridePercent,
+      originalPrice: basePrice,
+      effectivePrice: discounted,
+      stokClearance: 0,
+      nearestExpDate,
+    };
+  }
+
+  return {
+    isClearance: false,
+    discountPercent: 0,
+    originalPrice: null,
+    effectivePrice: basePrice,
+    stokClearance: 0,
+    nearestExpDate,
+  };
+}
 
 function getCategoryVisual(categoryName: string) {
   const lower = categoryName.toLowerCase();
@@ -141,14 +244,38 @@ export default function HomePage() {
   const getTotalItems = useCartStore((state) => state.getTotalItems);
 
   const [mounted, setMounted] = useState(false);
+  const [todayMs, setTodayMs] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [onlyAvailable, setOnlyAvailable] = useState<boolean>(false);
   const [addedDealId, setAddedDealId] = useState<string | null>(null);
+  const [isDealsPaused, setIsDealsPaused] = useState(false);
+
+  const dealsSliderRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    setTodayMs(now.getTime());
   }, []);
+
+  const scrollDealsSlider = (direction: 'left' | 'right') => {
+    const slider = dealsSliderRef.current;
+    if (!slider) return;
+    const step = 362;
+    if (direction === 'right') {
+      const isAtEnd =
+        slider.scrollLeft + slider.clientWidth >= slider.scrollWidth - 24;
+      if (isAtEnd) {
+        slider.scrollTo({ left: 0, behavior: 'smooth' });
+      } else {
+        slider.scrollBy({ left: step, behavior: 'smooth' });
+      }
+    } else {
+      slider.scrollBy({ left: -step, behavior: 'smooth' });
+    }
+  };
 
   const {
     data: products = [],
@@ -186,61 +313,75 @@ export default function HomePage() {
     }));
   }, [activeProducts]);
 
-  /**
-   * Seleksi Produk FEFO Flash Food Deals (Murni dari Database Backend):
-   * - Memfilter produk yang memiliki batch mendekati kedaluwarsa (<= 30 hari: FEFO Deal 20% & <= 7 hari: Clearance 50%)
-   *   atau batch yang memiliki diskon/hargaOverride aktif (isClearance === true).
-   * - Seluruh harga diskon dan persentase diambil langsung dari perhitungan Backend (tanpa karangan di Frontend).
-   */
   const fefoDealProducts = useMemo(() => {
-    const dealCandidates = activeProducts.filter((p) => {
-      const dealPrice = p.hargaClearance ?? p.hargaSetelahDiskon ?? null;
-      return (
-        p.isClearance === true &&
-        getProductStock(p) > 0 &&
-        typeof dealPrice === 'number' &&
-        dealPrice > 0 &&
-        dealPrice < p.hargaEceran
+    const available = activeProducts.filter((p) => getProductStock(p) > 0);
+    const clearanceItems = available.filter((p) => {
+      const raw = p as unknown as Record<string, unknown>;
+      return Boolean(raw.isClearance);
+    });
+
+    const sourceList =
+      clearanceItems.length > 0
+        ? clearanceItems
+        : [...available]
+            .sort((a, b) => getProductStock(a) - getProductStock(b))
+            .slice(0, 8);
+
+    return sourceList.map((product, idx) => {
+      const totalStock = getProductStock(product);
+      const fallbackPct = idx % 2 === 0 ? 20 : 15;
+      const promo = extractProductPromo(
+        product,
+        clearanceItems.length > 0 ? undefined : fallbackPct
       );
-    });
 
-    const sorted = [...dealCandidates].sort((a, b) => {
-      const daysA =
-        typeof a.sisaHariExpired === 'number' ? a.sisaHariExpired : 999;
-      const daysB =
-        typeof b.sisaHariExpired === 'number' ? b.sisaHariExpired : 999;
-      return daysA - daysB;
-    });
-
-    return sorted.slice(0, 8).map((product) => {
-      const stock =
-        typeof product.stokClearance === 'number' && product.stokClearance > 0
-          ? product.stokClearance
-          : getProductStock(product);
-      const daysLeft =
-        typeof product.sisaHariExpired === 'number'
-          ? product.sisaHariExpired
-          : 0;
-      const originalPrice = product.hargaEceran;
-      const discountedPrice =
-        product.hargaClearance ??
-        product.hargaSetelahDiskon ??
-        product.hargaEceran;
-      const discountPct =
-        typeof product.diskonPersen === 'number' ? product.diskonPersen : 0;
+      const originalPrice = promo.originalPrice ?? product.hargaEceran;
+      const discountedPrice = promo.effectivePrice;
       const savedAmount = Math.max(0, originalPrice - discountedPrice);
+      const displayStock =
+        promo.stokClearance > 0 ? promo.stokClearance : totalStock;
+
+      let daysLeft: number | null = null;
+      if (promo.nearestExpDate && todayMs !== null) {
+        const expDate = new Date(`${promo.nearestExpDate}T00:00:00`);
+        if (!Number.isNaN(expDate.getTime())) {
+          const diffDays = Math.ceil(
+            (expDate.getTime() - todayMs) / (1000 * 60 * 60 * 24)
+          );
+          daysLeft = Math.max(0, diffDays);
+        }
+      }
 
       return {
         product,
-        stock,
+        isRealClearance: promo.isClearance,
+        displayStock,
+        nearestExpDate: promo.nearestExpDate,
         daysLeft,
-        discountPct,
+        discountPct: promo.discountPercent,
         originalPrice,
         discountedPrice,
         savedAmount,
       };
     });
-  }, [activeProducts]);
+  }, [activeProducts, todayMs]);
+
+  useEffect(() => {
+    if (isDealsPaused || fefoDealProducts.length <= 1) return;
+    const timer = setInterval(() => {
+      const slider = dealsSliderRef.current;
+      if (!slider) return;
+      const isAtEnd =
+        slider.scrollLeft + slider.clientWidth >= slider.scrollWidth - 24;
+      if (isAtEnd) {
+        slider.scrollTo({ left: 0, behavior: 'smooth' });
+      } else {
+        slider.scrollBy({ left: 362, behavior: 'smooth' });
+      }
+    }, 3200);
+
+    return () => clearInterval(timer);
+  }, [isDealsPaused, fefoDealProducts.length]);
 
   const filteredProducts = useMemo(() => {
     return activeProducts.filter((product) => {
@@ -263,10 +404,18 @@ export default function HomePage() {
     });
   }, [activeProducts, selectedCategory, searchQuery, onlyAvailable]);
 
-  // Saat klik "+ Ambil Deal", masukkan produk ke keranjang (keranjang otomatis membaca data deal FEFO dari backend)
-  const handleQuickAddDeal = (product: ProductCatalogResponse) => {
+  const handleQuickAddDeal = (
+    product: ProductCatalogResponse,
+    discountedPrice: number
+  ) => {
     if (getProductStock(product) <= 0) return;
-    addItem(product, 1);
+    addItem(
+      {
+        ...product,
+        hargaEceran: discountedPrice,
+      },
+      1
+    );
     setAddedDealId(product.idProduk);
     setTimeout(() => setAddedDealId(null), 1300);
   };
@@ -282,7 +431,7 @@ export default function HomePage() {
         <div className="max-w-[1200px] mx-auto space-y-5 sm:space-y-6">
           <IncompleteProfileBanner />
 
-          {/* Header Bar Pencarian & Keranjang */}
+          {/* Header Bar Pencarian, Foto Profil & Keranjang */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
             <div className="relative flex-1 min-w-[220px] max-w-xl">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -297,12 +446,24 @@ export default function HomePage() {
 
             <div className="flex items-center gap-2.5">
               {mounted && user && (
-                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 text-xs">
-                  <span className="text-slate-500">Halo,</span>
-                  <strong className="text-slate-800">{user.nama}</strong>
-                  <span className="px-2 py-0.5 rounded-md bg-[#4737FF]/10 text-[#4737FF] text-[10px] font-extrabold">
-                    {user.tipeAkun}
-                  </span>
+                <div className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs">
+                  {/* Klik foto untuk melihat ukuran penuh (Popup) */}
+                  <CustomerAvatar
+                    user={user as unknown as Record<string, unknown>}
+                    size="sm"
+                    enablePreview
+                  />
+                  {/* Klik nama untuk menuju halaman Profil */}
+                  <Link
+                    href="/profile"
+                    className="hidden sm:flex items-center gap-1.5 hover:text-[#4737FF] transition-colors"
+                  >
+                    <span className="text-slate-500">Halo,</span>
+                    <strong className="text-slate-800">{user.nama}</strong>
+                    <span className="px-2 py-0.5 rounded-md bg-[#4737FF]/10 text-[#4737FF] text-[10px] font-extrabold">
+                      {user.tipeAkun}
+                    </span>
+                  </Link>
                 </div>
               )}
 
@@ -469,79 +630,102 @@ export default function HomePage() {
             </section>
           )}
 
-          {/* 2. FEFO FLASH FOOD DEALS (Mencolok, Bertekstur & Rincian Diskon Jelas) */}
+          {/* 2. FEFO FLASH FOOD DEALS (Auto-Scroll + Running Marquee Diskon Spesial) */}
           {fefoDealProducts.length > 0 && (
             <section
               id="fefo-deals"
-              className="relative rounded-2xl overflow-hidden border border-[#F75C03]/40 shadow-md p-5 sm:p-6 text-white"
+              onMouseEnter={() => setIsDealsPaused(true)}
+              onMouseLeave={() => setIsDealsPaused(false)}
+              className="relative rounded-2xl overflow-hidden border border-[#F75C03]/40 shadow-sm text-white"
               style={{
                 background:
-                  'linear-gradient(135deg, #F75C03 0%, #D93800 48%, #3529BF 100%)',
+                  'linear-gradient(135deg, #F75C03 0%, #D93800 50%, #3529BF 100%)',
               }}
             >
-              {/* Layer Tekstur Dot-Matrix & Garis Diagonal Halus */}
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 opacity-20"
                 style={{
                   backgroundImage:
-                    'radial-gradient(rgba(255, 255, 255, 0.75) 1.25px, transparent 1.25px), repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 10px, transparent 10px, transparent 20px)',
-                  backgroundSize: '18px 18px, 100% 100%',
+                    'radial-gradient(rgba(255, 255, 255, 0.75) 1px, transparent 1px), repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 8px, transparent 8px, transparent 16px)',
+                  backgroundSize: '14px 14px, 100% 100%',
                 }}
               />
 
-              {/* Cahaya Dekoratif Sudut */}
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute -top-20 -right-20 w-64 h-64 rounded-full bg-amber-300/25 blur-3xl"
-              />
+              {/* Pita Teks Berjalan Diskon Spesial */}
+              <div className="relative z-10 bg-black/20 backdrop-blur-xs border-b border-white/15 py-1.5 overflow-hidden">
+                <div className="ff-marquee-track">
+                  {[...DEALS_MARQUEE_TEXTS, ...DEALS_MARQUEE_TEXTS].map(
+                    (text, idx) => (
+                      <div
+                        key={idx}
+                        className="inline-flex items-center gap-2 px-5 text-[11px] font-extrabold text-amber-200 whitespace-nowrap tracking-wide"
+                      >
+                        <Flame className="w-3.5 h-3.5 text-amber-300 fill-amber-300 shrink-0" />
+                        <span>{text}</span>
+                        <span className="text-white/50 ml-3">•</span>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
 
-              <div className="relative z-10 space-y-5">
-                {/* Header Big Deals */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/20">
-                  <div className="space-y-1.5">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-300 text-slate-900 text-[11px] font-extrabold uppercase tracking-wider shadow-xs">
-                      <Zap className="w-3.5 h-3.5 fill-slate-900" />
-                      <span>BIG DEALS • FEFO FLASH SALE</span>
+              <div className="relative z-10 p-3.5 sm:p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/20">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-300 text-slate-900 text-[10px] font-extrabold uppercase tracking-wider shadow-2xs">
+                        <Zap className="w-3 h-3 fill-slate-900" />
+                        <span>BIG DEALS • FEFO FLASH SALE</span>
+                      </span>
+                      <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/15 border border-white/20 text-[10px] font-semibold text-white">
+                        <Snowflake className="w-3 h-3 text-amber-300" />
+                        <span>Kualitas Fresh -18°C Terjamin</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/25 border border-emerald-300/30 text-[10px] font-bold text-emerald-100">
+                        <span>
+                          {isDealsPaused ? '⏸ Dijeda' : '▶ Geser Otomatis'}
+                        </span>
+                      </span>
                     </div>
-                    <h2 className="font-heading text-lg sm:text-2xl font-extrabold text-white tracking-tight">
+
+                    <h2 className="font-heading text-sm sm:text-base font-extrabold text-white tracking-tight">
                       Penawaran Batch Prioritas FEFO (H-30 Diskon 20% • Clearance H-7 Diskon 50%)
                     </h2>
-                    <p className="text-xs text-white/90 max-w-2xl leading-relaxed">
-                      Produk prioritas sistem{' '}
-                      <strong className="text-amber-200">
-                        First Expired, First Out (FEFO)
-                      </strong>{' '}
-                      yang masa simpannya tinggal beberapa hari, namun{' '}
-                      <strong className="underline decoration-amber-300 underline-offset-2">
-                        100% terjaga beku -18°C & siap masak
-                      </strong>
-                      . Harga otomatis terpotong!
-                    </p>
                   </div>
 
-                  <div className="flex items-center gap-2 self-start md:self-center px-3.5 py-2 rounded-xl bg-white/15 backdrop-blur-xs border border-white/25 text-xs font-bold text-white shrink-0">
-                    <Snowflake className="w-4 h-4 text-amber-300 shrink-0" />
-                    <span>Kualitas Fresh -18°C Terjamin</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] font-semibold text-white/85 mr-1 hidden md:inline">
+                      {fefoDealProducts.length} produk promo
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => scrollDealsSlider('left')}
+                      aria-label="Geser produk promo ke kiri"
+                      className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/25 border border-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollDealsSlider('right')}
+                      aria-label="Geser produk promo ke kanan"
+                      className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/25 border border-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
-                {/* Grid Kartu Produk Flash Deal (Adaptif jika hanya 2 produk agar penuh & proporsional) */}
                 <div
-                  className={`grid grid-cols-1 gap-4 ${
-                    fefoDealProducts.length === 1
-                      ? 'md:grid-cols-1 max-w-xl'
-                      : fefoDealProducts.length === 2
-                        ? 'md:grid-cols-2'
-                        : fefoDealProducts.length === 3
-                          ? 'sm:grid-cols-2 lg:grid-cols-3'
-                          : 'sm:grid-cols-2 lg:grid-cols-4'
-                  }`}
+                  ref={dealsSliderRef}
+                  className="flex items-stretch gap-3.5 overflow-x-auto snap-x snap-mandatory scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                 >
                   {fefoDealProducts.map(
                     ({
                       product,
-                      stock,
+                      displayStock,
+                      nearestExpDate,
                       daysLeft,
                       discountPct,
                       originalPrice,
@@ -549,90 +733,80 @@ export default function HomePage() {
                       savedAmount,
                     }) => {
                       const isAdded = addedDealId === product.idProduk;
-                      const isHorizontalCard = fefoDealProducts.length <= 2;
+                      const imgUrl = resolveProductImageUrl(product.gambar);
 
                       return (
                         <div
                           key={product.idProduk}
-                          className={`group rounded-xl bg-white text-slate-800 p-3.5 shadow-md hover:shadow-xl transition-all flex ${
-                            isHorizontalCard
-                              ? 'flex-col sm:flex-row items-stretch gap-4'
-                              : 'flex-col justify-between gap-3'
-                          }`}
+                          className="w-[310px] sm:w-[350px] shrink-0 snap-start group rounded-xl bg-white text-slate-800 p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-3"
                         >
-                          {/* Gambar Produk */}
                           <Link
                             href={`/products/${product.idProduk}`}
-                            className={`relative rounded-lg bg-slate-100 overflow-hidden block shrink-0 ${
-                              isHorizontalCard
-                                ? 'w-full sm:w-48 aspect-[16/10] sm:aspect-square'
-                                : 'w-full aspect-[16/10]'
-                            }`}
+                            className="relative w-24 h-24 sm:w-26 sm:h-26 rounded-lg bg-slate-100 overflow-hidden block shrink-0"
                           >
-                            {product.gambar ? (
+                            {imgUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
-                                src={product.gambar}
+                                src={imgUrl}
                                 alt={product.namaProduk}
                                 className="w-full h-full object-cover motion-safe:group-hover:scale-105 transition-transform duration-300"
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-[#4737FF]/40">
-                                <Snowflake className="w-8 h-8" />
+                                <Snowflake className="w-6 h-6" />
                               </div>
                             )}
 
-                            {/* Badge Persen Diskon */}
-                            <div className="absolute top-2 left-2 flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#F75C03] text-white text-[11px] font-extrabold shadow-xs">
-                              <Tag className="w-3 h-3" />
+                            <div className="absolute top-1.5 left-1.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#F75C03] text-white text-[9px] font-extrabold shadow-2xs">
+                              <Tag className="w-2.5 h-2.5" />
                               <span>Diskon {discountPct}%</span>
                             </div>
 
-                            {/* Indikator Hari & Sisa Stok */}
-                            <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-1">
-                              <span className="px-2 py-0.5 rounded-md bg-white/95 text-[#D93800] text-[10px] font-extrabold shadow-2xs">
-                                ⏳ Exp {daysLeft} Hari Lagi
-                              </span>
-                              <span className="px-2 py-0.5 rounded-md bg-[#159A68] text-white text-[10px] font-bold shadow-2xs">
-                                Sisa {stock}
+                            <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between gap-1">
+                              <span className="px-1.5 py-0.5 rounded bg-white/95 text-[#D93800] text-[9px] font-extrabold truncate shadow-2xs">
+                                {daysLeft !== null
+                                  ? `⏳ Exp ${daysLeft} Hari Lagi`
+                                  : nearestExpDate
+                                    ? `Exp ${nearestExpDate}`
+                                    : 'Prioritas FEFO'}
                               </span>
                             </div>
                           </Link>
 
-                          {/* Detail & Rincian Harga Diskon */}
-                          <div className="flex-1 flex flex-col justify-between min-w-0">
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#4737FF]">
-                                  {product.kategori || 'Batch Prioritas FEFO'}
+                          <div className="flex-1 min-w-0 flex flex-col justify-between h-full space-y-1.5">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-[9px] font-extrabold uppercase tracking-wider text-[#4737FF] truncate">
+                                  {product.kategori || 'Batch FEFO'}
                                 </span>
-                                <span className="px-2 py-0.5 rounded-md bg-amber-100 text-[#D93800] text-[10px] font-extrabold">
-                                  Hemat {formatRupiah(savedAmount)}
-                                </span>
+                                {savedAmount > 0 && (
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-100 text-[#D93800] text-[9px] font-extrabold shrink-0">
+                                    Hemat {formatRupiah(savedAmount)}
+                                  </span>
+                                )}
                               </div>
 
                               <Link
                                 href={`/products/${product.idProduk}`}
-                                className="font-heading text-sm sm:text-base font-extrabold text-slate-800 hover:text-[#4737FF] line-clamp-2 block leading-snug"
+                                className="font-heading text-xs sm:text-[13px] font-extrabold text-slate-800 hover:text-[#4737FF] line-clamp-1 block"
                               >
                                 {product.namaProduk}
                               </Link>
 
-                              {/* Bar Sisa Batch */}
-                              <div className="pt-1.5">
-                                <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                              <div className="pt-0.5">
+                                <div className="flex justify-between text-[9px] text-slate-500 mb-0.5">
                                   <span>Stok Batch Promo</span>
                                   <span className="font-bold text-[#F75C03]">
-                                    Tersisa {stock} pack
+                                    Sisa {displayStock} pack
                                   </span>
                                 </div>
-                                <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                                <div className="w-full h-1 rounded-full bg-slate-100 overflow-hidden">
                                   <div
                                     className="h-full bg-gradient-to-r from-[#F75C03] to-amber-500 rounded-full"
                                     style={{
                                       width: `${Math.min(
-                                        92,
-                                        Math.max(28, 100 - stock)
+                                        90,
+                                        Math.max(25, 100 - displayStock)
                                       )}%`,
                                     }}
                                   />
@@ -640,39 +814,35 @@ export default function HomePage() {
                               </div>
                             </div>
 
-                            {/* Baris Harga Normal vs Harga Setelah Diskon + Tombol Ambil Deal */}
-                            <div className="pt-3 mt-3 border-t border-slate-100 flex items-end justify-between gap-2">
-                              <div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-slate-400 font-semibold">
-                                    Harga Asli:
-                                  </span>
-                                  <span className="text-xs text-slate-400 line-through font-bold">
+                            <div className="pt-1.5 border-t border-slate-100 flex items-end justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1 leading-none">
+                                  <span className="text-[10px] text-slate-400 line-through font-semibold">
                                     {formatRupiah(originalPrice)}
                                   </span>
-                                </div>
-                                <div className="flex items-baseline gap-1.5 mt-0.5">
-                                  <span className="font-heading text-base sm:text-lg font-extrabold text-[#F75C03]">
-                                    {formatRupiah(discountedPrice)}
-                                  </span>
-                                  <span className="text-[10px] font-bold text-[#159A68]">
+                                  <span className="text-[9px] font-extrabold text-[#159A68]">
                                     (-{discountPct}%)
                                   </span>
                                 </div>
+                                <span className="font-heading text-sm font-extrabold text-[#F75C03] block whitespace-nowrap mt-0.5">
+                                  {formatRupiah(discountedPrice)}
+                                </span>
                               </div>
 
                               <button
                                 type="button"
-                                onClick={() => handleQuickAddDeal(product)}
-                                className={`px-3.5 py-2.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 shadow-xs ${
+                                onClick={() =>
+                                  handleQuickAddDeal(product, discountedPrice)
+                                }
+                                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer inline-flex items-center gap-1 shrink-0 shadow-2xs ${
                                   isAdded
                                     ? 'bg-[#159A68] text-white'
                                     : 'bg-[#F75C03] hover:bg-[#D94800] text-white'
                                 }`}
                               >
-                                <ShoppingBag className="w-3.5 h-3.5" />
+                                <ShoppingBag className="w-3 h-3" />
                                 <span>
-                                  {isAdded ? 'Ditambahkan!' : '+ Ambil Deal'}
+                                  {isAdded ? 'Masuk!' : '+ Ambil Deal'}
                                 </span>
                               </button>
                             </div>

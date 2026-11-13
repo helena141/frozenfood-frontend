@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,6 +21,8 @@ import {
   Phone,
   MapPin,
   Lock,
+  Eye,
+  ZoomIn,
 } from 'lucide-react';
 import { api } from '@/lib/axios';
 import { useAuthStore } from '@/store/auth-store';
@@ -28,6 +30,7 @@ import { CustomerResponse, CustomerUpdateRequest } from '@/types/api';
 import { getErrorMessage, formatDateTimeId } from '@/lib/utils';
 import ShopSidebar from '@/components/shop/sidebar';
 import CartPanel from '@/components/shop/cart-panel';
+import { resolveProfileImageUrl } from '@/components/shop/customer-avatar';
 
 const profileSchema = z.object({
   nama: z.string().min(2, 'Nama lengkap minimal 2 karakter'),
@@ -46,6 +49,7 @@ type ProfileFormValues = z.infer<typeof profileSchema>;
 
 export default function CustomerProfilePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, login, logout } = useAuthStore();
   const [mounted, setMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -55,6 +59,7 @@ export default function CustomerProfilePage() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [isDeactivating, setIsDeactivating] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -134,6 +139,7 @@ export default function CustomerProfilePage() {
       }
       setActionSuccess('Profil akun Anda berhasil diperbarui.');
       await refetch();
+      queryClient.invalidateQueries({ queryKey: ['customer-me'] });
     } catch (err) {
       setActionError(
         getErrorMessage(err, 'Gagal memperbarui data profil pelanggan.')
@@ -160,6 +166,7 @@ export default function CustomerProfilePage() {
       });
       setActionSuccess('Foto profil berhasil diperbarui.');
       await refetch();
+      queryClient.invalidateQueries({ queryKey: ['customer-me'] });
     } catch (err) {
       setActionError(
         getErrorMessage(
@@ -195,12 +202,7 @@ export default function CustomerProfilePage() {
     }
   };
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-  const photoUrl =
-    profile?.fotoProfil && profile.fotoProfil.startsWith('/')
-      ? `${baseUrl}${profile.fotoProfil}`
-      : profile?.fotoProfil || null;
+  const photoUrl = resolveProfileImageUrl(profile?.fotoProfil);
 
   return (
     <div className="lezzat-shell">
@@ -314,7 +316,13 @@ export default function CustomerProfilePage() {
                 {/* Kartu Foto Profil & Ringkasan Akun */}
                 <section className="ff-card bg-white p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
                   <div className="flex items-center gap-4">
-                    <div className="relative w-20 h-20 rounded-2xl bg-[#E7EFFF] border-2 border-[#D1CDFF] overflow-hidden flex items-center justify-center text-[#4737FF] shrink-0 shadow-xs">
+                    {/* Klik Foto untuk Melihat Ukuran Penuh */}
+                    <button
+                      type="button"
+                      onClick={() => setShowPhotoModal(true)}
+                      title="Klik untuk melihat foto profil ukuran penuh"
+                      className="group relative w-20 h-20 rounded-2xl bg-[#E7EFFF] border-2 border-[#D1CDFF] hover:border-[#4737FF] overflow-hidden flex items-center justify-center text-[#4737FF] shrink-0 shadow-xs cursor-pointer transition-all"
+                    >
                       {photoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -325,7 +333,11 @@ export default function CustomerProfilePage() {
                       ) : (
                         <User className="w-8 h-8 opacity-70" />
                       )}
-                    </div>
+                      <span className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-bold">
+                        <ZoomIn className="w-4 h-4 mb-0.5" />
+                        <span>Lihat</span>
+                      </span>
+                    </button>
 
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -353,7 +365,8 @@ export default function CustomerProfilePage() {
                     </div>
                   </div>
 
-                  <div>
+                  {/* Tombol Lihat Foto & Ganti Foto Profil */}
+                  <div className="flex flex-wrap items-center gap-2.5">
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -361,13 +374,23 @@ export default function CustomerProfilePage() {
                       onChange={handlePhotoChange}
                       className="hidden"
                     />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPhotoModal(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#E6E8F0] bg-white hover:bg-[#F8FAFF] hover:border-[#4737FF] text-[#171725] text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4 text-[#4737FF]" />
+                      <span>Lihat Foto Profil</span>
+                    </button>
+
                     <button
                       type="button"
                       disabled={isUploadingPhoto}
                       onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#E6E8F0] bg-[#F8FAFF] hover:bg-[#E7EFFF] hover:border-[#4737FF] disabled:opacity-50 text-[#171725] text-xs font-bold transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4737FF] hover:bg-[#3529BF] disabled:opacity-50 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
                     >
-                      <Camera className="w-4 h-4 text-[#4737FF]" />
+                      <Camera className="w-4 h-4" />
                       <span>
                         {isUploadingPhoto
                           ? 'Mengunggah Foto...'
@@ -528,6 +551,82 @@ export default function CustomerProfilePage() {
               </div>
             )}
           </>
+        )}
+
+        {/* Modal Lihat Foto Profil Ukuran Penuh */}
+        {showPhotoModal && profile && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setShowPhotoModal(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#101018]/75 backdrop-blur-xs p-4"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl max-w-md w-full border border-[#E6E8F0] shadow-2xl overflow-hidden"
+            >
+              <div className="px-5 py-4 border-b border-[#E6E8F0] flex items-center justify-between">
+                <div>
+                  <h3 className="font-heading text-sm font-extrabold text-[#171725]">
+                    Foto Profil {profile.nama}
+                  </h3>
+                  <p className="text-[11px] text-[#77788A]">{profile.email}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPhotoModal(false)}
+                  className="w-8 h-8 rounded-xl bg-[#F1F3F8] hover:bg-[#E6E8F0] text-[#171725] flex items-center justify-center cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 bg-[#F8FAFF] flex flex-col items-center justify-center">
+                <div className="w-72 h-72 rounded-2xl overflow-hidden border-4 border-white shadow-md bg-[#E7EFFF] flex items-center justify-center text-[#4737FF]">
+                  {photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={photoUrl}
+                      alt={profile.nama}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-center p-4">
+                      <User className="w-16 h-16 opacity-50 mb-2" />
+                      <p className="text-xs font-bold text-[#171725]">
+                        Belum Ada Foto Profil
+                      </p>
+                      <p className="text-[11px] text-[#77788A] mt-0.5">
+                        Klik tombol Ganti Foto di bawah untuk mengunggah foto
+                        Anda.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="px-5 py-4 bg-white border-t border-[#E6E8F0] flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPhotoModal(false);
+                    fileInputRef.current?.click();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#4737FF] hover:bg-[#3529BF] text-white text-xs font-bold cursor-pointer"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Ganti Foto</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPhotoModal(false)}
+                  className="px-4 py-2 rounded-xl border border-[#E6E8F0] bg-white hover:bg-[#F1F3F8] text-[#171725] text-xs font-semibold cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Modal Konfirmasi Nonaktifkan Akun */}
