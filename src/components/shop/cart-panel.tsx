@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import {
   Minus,
@@ -18,6 +18,8 @@ import {
   getProductStock,
 } from '@/lib/utils';
 
+const emptySubscribe = () => () => {};
+
 export default function CartPanel() {
   const {
     items,
@@ -30,11 +32,11 @@ export default function CartPanel() {
   } = useCartStore();
   const user = useAuthStore((state) => state.user);
 
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
 
   const displayItems = mounted ? items : [];
   const totalItems = mounted ? getTotalItems() : 0;

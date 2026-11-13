@@ -67,3 +67,22 @@ body {
 .ff-hero-gradient {
   background: linear-gradient(135deg, #4737ff 0%, #3529bf 60%, #2b2199 100%);
 }
+
+@keyframes ffMarquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.ff-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: ffMarquee 32s linear infinite;
+}
+
+.ff-marquee-track:hover {
+  animation-play-state: paused;
+}

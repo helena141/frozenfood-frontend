@@ -124,25 +124,6 @@ export default function HeroCarousel({
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
-      <style jsx>{`
-        @keyframes ffMarquee {
-          0% {
-            transform: translateX(0%);
-          }
-          100% {
-            transform: translateX(-50%);
-          }
-        }
-        .ff-marquee-track {
-          display: flex;
-          width: max-content;
-          animation: ffMarquee 32s linear infinite;
-        }
-        .ff-marquee-track:hover {
-          animation-play-state: paused;
-        }
-      `}</style>
-
       {/* Area Utama Carousel yang Ringkas */}
       <div className="relative ff-hero-gradient text-white p-4 sm:p-6 overflow-hidden">
         <div className="relative overflow-hidden">
@@ -233,7 +214,7 @@ export default function HeroCarousel({
                   {/* Kolom Kanan: Kartu Sorotan Katalog Ringkas (Tanpa Frame Bertumpuk) */}
                   <div className="lg:col-span-5">
                     <div className="rounded-xl bg-white/15 backdrop-blur-xs p-3">
-                      <div className="aspect-[16/9] rounded-lg overflow-hidden bg-slate-100 relative">
+                      <div className="aspect-video rounded-lg overflow-hidden bg-slate-100 relative">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={displayImg}
