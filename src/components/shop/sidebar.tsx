@@ -13,12 +13,12 @@ import {
   LogOut,
   ShieldCheck,
   PanelLeftClose,
-  PanelLeftOpen,
   Menu,
   X,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
 import { useCartStore } from '@/store/cart-store';
+import CustomerAvatar from '@/components/shop/customer-avatar';
 
 function ShopSidebarContent() {
   const pathname = usePathname();
@@ -233,18 +233,29 @@ function ShopSidebarContent() {
           </div>
         </div>
 
-        {/* Bagian Bawah: Status Akun */}
+        {/* Bagian Bawah: Status Akun + Foto Profil */}
         <div className="pt-3.5 border-t border-slate-100 min-w-[208px]">
           {activeUser ? (
             <div className="space-y-2.5">
               <div className="px-2.5 py-2 rounded-xl bg-slate-50 flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-800 truncate">
-                    {activeUser.nama}
-                  </p>
-                  <p className="text-[11px] text-slate-500 truncate">
-                    {activeUser.email}
-                  </p>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CustomerAvatar
+                    user={activeUser as unknown as Record<string, unknown>}
+                    size="sm"
+                    enablePreview
+                  />
+                  <Link
+                    href="/profile"
+                    onClick={() => setIsMobileOpen(false)}
+                    className="min-w-0 hover:text-[#4737FF] transition-colors"
+                  >
+                    <p className="text-xs font-bold text-slate-800 truncate">
+                      {activeUser.nama}
+                    </p>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      {activeUser.email}
+                    </p>
+                  </Link>
                 </div>
                 <span className="px-2 py-0.5 rounded-md bg-[#4737FF]/10 text-[#4737FF] text-[10px] font-extrabold shrink-0">
                   {activeUser.tipeAkun}
